@@ -73,21 +73,29 @@ export default function Home() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       setLoginError("* Error: Fields cannot be blank");
       return;
     }
-    
+
     setLoginError("");
     setIsTransitioning(true);
-    
-    // Smooth transition from login to dashboard matching the balloon's flight time (2.2s)
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Authentication failed");
       setIsLoggedIn(true);
+    } catch (error) {
+      setLoginError(`* Error: ${error instanceof Error ? error.message : "Authentication failed"}`);
+    } finally {
       setIsTransitioning(false);
-    }, 2100);
+    }
   };
 
   const handleKeystroke = useCallback(async (e: KeystrokeEvent) => {
@@ -301,7 +309,7 @@ export default function Home() {
           </form>
           
           <Typography variant="caption" sx={{ color: "var(--text-secondary)", textAlign: "center", opacity: 0.8 }}>
-            Hint: Enter any credentials to trigger the deflating balloon animation.
+            Configure dashboard credentials in `.env.local` before signing in. Local demo mode accepts `demo` / `demo`.
           </Typography>
         </Box>
       </Box>

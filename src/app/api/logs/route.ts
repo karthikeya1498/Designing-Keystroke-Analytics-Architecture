@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { isValidSession, SESSION_COOKIE } from "../../utils/auth";
 
 export const runtime = "nodejs";
 
@@ -45,9 +46,12 @@ function isRateLimited(request: Request): boolean {
 
 function hasIngestAccess(request: Request): boolean {
   const configuredToken = process.env.AEGISKEY_INGEST_TOKEN;
-  if (configuredToken) {
-    return request.headers.get("authorization") === `Bearer ${configuredToken}`;
-  }
+  if (configuredToken && request.headers.get("authorization") === `Bearer ${configuredToken}`) return true;
+
+  const sessionCookie = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
+  const sessionValue = sessionCookie?.slice(`${SESSION_COOKIE}=`.length);
+  if (isValidSession(sessionValue)) return true;
+
   return process.env.NODE_ENV !== "production" && process.env.AEGISKEY_ALLOW_DEMO_INGEST === "true";
 }
 

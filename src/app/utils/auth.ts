@@ -1,0 +1,39 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export const SESSION_COOKIE = "aegiskey_session";
+const SESSION_TTL_SECONDS = 60 * 60 * 8;
+
+function secret(): string {
+  const value = process.env.AEGISKEY_SESSION_SECRET;
+  if (!value || value.length < 32) throw new Error("AEGISKEY_SESSION_SECRET must be at least 32 characters");
+  return value;
+}
+
+function signature(payload: string): string {
+  return createHmac("sha256", secret()).update(payload).digest("base64url");
+}
+
+export function createSession(username: string): string {
+  const payload = `${username}:${Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS}`;
+  return `${payload}.${signature(payload)}`;
+}
+
+export function isValidSession(value: string | undefined): boolean {
+  if (!value) return false;
+  const [username, expiry, providedSignature] = value.split(":");
+  if (!username || !expiry || !providedSignature || Number(expiry) < Math.floor(Date.now() / 1000)) return false;
+  const payload = `${username}:${expiry}`;
+  const expected = signature(payload);
+  const provided = Buffer.from(providedSignature);
+  const expectedBuffer = Buffer.from(expected);
+  return provided.length === expectedBuffer.length && timingSafeEqual(provided, expectedBuffer);
+}
+
+export function configuredCredentialsMatch(username: string, password: string): boolean {
+  const configuredUsername = process.env.AEGISKEY_DASHBOARD_USER;
+  const configuredPassword = process.env.AEGISKEY_DASHBOARD_PASSWORD;
+  if (!configuredUsername || !configuredPassword) return false;
+  return username === configuredUsername && password === configuredPassword;
+}
+
+export const sessionMaxAge = SESSION_TTL_SECONDS;

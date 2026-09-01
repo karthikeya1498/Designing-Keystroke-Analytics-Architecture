@@ -1,5 +1,7 @@
 # AegisKey: Keystroke Analytics Architecture
 
+AegisKey now includes five connected dashboard views—Overview, Analytics, Security, Pipeline, and Encrypted Logs—with selectable top, sidebar, or bottom navigation. Cards and controls provide lift-and-shine feedback, the dashboard supports horizontal two-finger swipe navigation on touch devices, and the shell includes a browser Fullscreen API control.
+
 AegisKey is a **browser-based keystroke analytics prototype**. It demonstrates an interactive typing sandbox, local session metrics, an encrypted event-envelope flow, bounded API ingestion, and explicitly synthetic security scenarios. It is not an operating-system keyboard monitor, a production identity system, or an AI service integration.
 
 ## Current capability boundary
@@ -43,9 +45,14 @@ AEGISKEY_ALLOW_DEMO_INGEST=true
 
 # Production/API-gateway credential. Use a secret manager and rotate it.
 # AEGISKEY_INGEST_TOKEN=replace-with-a-long-random-token
+
+# Dashboard session configuration.
+# AEGISKEY_DASHBOARD_USER=operator
+# AEGISKEY_DASHBOARD_PASSWORD=replace-with-a-strong-password
+# AEGISKEY_SESSION_SECRET=replace-with-at-least-32-random-characters
 ```
 
-When `AEGISKEY_INGEST_TOKEN` is set, both `POST /api/logs` and `GET /api/logs` require `Authorization: Bearer <token>`. If no token is set, the route is available only when the non-production demo flag is enabled.
+When `AEGISKEY_INGEST_TOKEN` is set, bearer authentication is accepted for agents and gateways. The browser dashboard authenticates through `POST /api/auth/login`, which issues an HttpOnly, SameSite signed session cookie. Configure `AEGISKEY_DASHBOARD_USER`, `AEGISKEY_DASHBOARD_PASSWORD`, and a random `AEGISKEY_SESSION_SECRET` of at least 32 characters. If no credentials are configured, only local demo login `demo` / `demo` is available when the non-production demo flag is enabled. If no token is set, the logs route is available only when the non-production demo flag is enabled or a valid dashboard session exists.
 
 ## API contract
 
