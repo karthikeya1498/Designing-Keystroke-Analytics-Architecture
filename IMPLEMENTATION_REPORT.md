@@ -71,3 +71,25 @@ A source scan confirmed that runtime code no longer contains `keyHex`, `ENCRYPTI
 ## Remaining production work
 
 The implementation is materially safer and more credible, but it is not an enterprise telemetry platform. Before production use, replace the JSONL adapter with a tenant-isolated managed database, add durable distributed rate limiting, use authenticated device enrollment and a platform keystore, implement key rotation and revocation, enforce retention and deletion workflows, place the API behind a real identity provider or gateway, and add an explicitly consented OS agent if OS-wide collection is required. Any behavioral model must be separately evaluated for accuracy, drift, privacy, and bias before being described as AI security detection.
+
+## Dashboard experience added in the second implementation pass
+
+The frontend now exposes five distinct connected views: Overview, Analytics, Security, Pipeline, and Encrypted Logs. Navigation is implemented as a reusable `DashboardNav` component and can be switched at runtime between a top bar, a left sidebar, and a floating bottom bar. The active view is reflected in accessible navigation state.
+
+The dashboard shell supports horizontal two-finger swipe gestures on touch-capable devices. A left swipe advances to the next dashboard and a right swipe returns to the previous dashboard. Vertical movement is ignored so normal scrolling remains available. The Fullscreen API control enters and exits fullscreen and tracks external fullscreen changes through the `fullscreenchange` event.
+
+The visual interaction layer adds a controlled lift, shadow expansion, and diagonal shine sweep to cards, alert panels, pipeline nodes, and keyboard keys. It includes responsive breakpoints for compact devices and honors `prefers-reduced-motion` to avoid forcing animation on users who request reduced motion.
+
+The login form is now connected to `POST /api/auth/login`. Configured credentials receive an HttpOnly, SameSite signed session cookie. The logs API accepts either the configured bearer token or a valid dashboard session, so the browser frontend and backend are connected without exposing server secrets in client-side JavaScript.
+
+## Commit history
+
+The remediation was intentionally split into multiple commits:
+
+| Commit | Purpose |
+| --- | --- |
+| `4c71dc3` | Harden encrypted event ingestion and clarify prototype scope |
+| `ef50023` | Add responsive dashboards and interaction controls |
+| `69db015` | Connect dashboard login to protected event APIs |
+
+All three commits are local on the `main` branch. The working tree is clean after the final validation pass.
