@@ -1,81 +1,53 @@
 /**
- * Web Crypto API AES-GCM 256-bit Encryption helper for simulated local agent.
+ * Browser-side encryption for the demo agent.
+ *
+ * The AES key is deliberately non-extractable and is never returned, logged, or
+ * sent with the event. This protects the demo from the original
+ * "ciphertext + key" design error. Production agents should use a device key
+ * protected by the platform keystore and rotate it through a KMS-backed flow.
  */
 
 let cachedKey: CryptoKey | null = null;
 
+type SerializablePayload = Record<string, string | number | boolean | null>;
+
 async function getKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey;
+  if (typeof window === "undefined" || !window.crypto?.subtle) {
+    throw new Error("Web Crypto is unavailable outside a secure browser context");
+  }
+
   cachedKey = await window.crypto.subtle.generateKey(
-    {
-      name: "AES-GCM",
-      length: 256,
-    },
-    true,
-    ["encrypt", "decrypt"]
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
   );
   return cachedKey;
 }
 
 export interface EncryptedPayload {
+  algorithm: "AES-256-GCM";
   ciphertext: string;
   iv: string;
-  keyHex: string;
 }
 
-export async function encryptEvent(payload: any): Promise<EncryptedPayload> {
-  if (typeof window === "undefined" || !window.crypto || !window.crypto.subtle) {
-    // Server-side rendering fallback
-    return {
-      ciphertext: "4f82d3e91a2bc8f47e6d",
-      iv: "1234567890abcdef12345678",
-      keyHex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-    };
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function encryptEvent(payload: SerializablePayload): Promise<EncryptedPayload> {
+  if (typeof window === "undefined" || !window.crypto?.subtle) {
+    throw new Error("Cannot encrypt keystroke events during server-side rendering");
   }
 
-  try {
-    const key = await getKey();
-    const encoder = new TextEncoder();
-    const data = encoder.encode(JSON.stringify(payload));
-    
-    // Generate a random 12-byte initialization vector (IV) for AES-GCM
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    
-    const encrypted = await window.crypto.subtle.encrypt(
-      {
-        name: "AES-GCM",
-        iv: iv,
-      },
-      key,
-      data
-    );
+  const key = await getKey();
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(payload));
+  const encrypted = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
 
-    const ciphertextBuffer = new Uint8Array(encrypted);
-    const ciphertextHex = Array.from(ciphertextBuffer)
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-      
-    const ivHex = Array.from(iv)
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-      
-    // Export raw key bytes to display in the dashboard logs
-    const exportedKey = await window.crypto.subtle.exportKey("raw", key);
-    const keyHex = Array.from(new Uint8Array(exportedKey))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    return {
-      ciphertext: ciphertextHex,
-      iv: ivHex,
-      keyHex: keyHex,
-    };
-  } catch (err) {
-    console.error("Encryption failed:", err);
-    return {
-      ciphertext: "ENCRYPTION_ERROR",
-      iv: "000000000000000000000000",
-      keyHex: "0000000000000000000000000000000000000000000000000000000000000000",
-    };
-  }
+  return {
+    algorithm: "AES-256-GCM",
+    ciphertext: bytesToHex(new Uint8Array(encrypted)),
+    iv: bytesToHex(iv),
+  };
 }

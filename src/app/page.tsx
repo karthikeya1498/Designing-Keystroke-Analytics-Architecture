@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Box, Typography, Container } from "@mui/material";
-import { ShieldCheck, ShieldAlert, AlertTriangle, Cpu, Activity, Shield, Terminal, AppWindow, FileSpreadsheet } from "lucide-react";
+import { ShieldCheck, ShieldAlert, AlertTriangle, Cpu, Activity, Shield, Terminal } from "lucide-react";
 import KeyboardSandbox from "./components/KeyboardSandbox";
 import PipelineVisualizer from "./components/PipelineVisualizer";
 import AnalyticsPanel from "./components/AnalyticsPanel";
@@ -61,11 +61,43 @@ export default function Home() {
     }, 2100);
   };
 
+  const handleKeystroke = useCallback(async (e: KeystrokeEvent) => {
+    setLatestKeystroke(e);
+
+    try {
+      const encrypted = await encryptEvent({
+        key: e.key,
+        code: e.code,
+        timestamp: e.timestamp,
+        isCorrect: e.isCorrect,
+      });
+
+      const response = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          events: [{
+            eventId: crypto.randomUUID(),
+            timestamp: e.timestamp,
+            app: currentApp,
+            isCorrect: e.isCorrect,
+            ...encrypted,
+          }],
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Log ingestion failed (${response.status})`);
+      setLogRefreshTrigger((prev) => !prev);
+    } catch (err) {
+      console.error("Failed to persist encrypted keystroke event:", err);
+    }
+  }, [currentApp]);
+
   // Background Live Workstation Simulator
   useEffect(() => {
     if (!isSimulating) return;
 
-    const sampleSentence = "AegisKey endpoint protection active. Vertex AI is modeling user biometrics. AES-GCM encryption verified.";
+    const sampleSentence = "AegisKey browser sandbox is active. Local metrics are derived from observed input. AES-GCM encryption verified.";
     let charIndex = 0;
 
     const interval = setInterval(() => {
@@ -94,14 +126,15 @@ export default function Home() {
         key: char,
         code,
         timestamp: Date.now(),
-        isCorrect: Math.random() > 0.04, // 96% accuracy
+        // Deterministic demo signal: every 23rd generated event is marked as a synthetic error.
+        isCorrect: charIndex % 23 !== 0,
       });
 
       // Update statistics with organic fluctuations
       setStats((prev) => {
         const nextTotal = prev.totalKeys + 1;
         const speed = 74 + Math.round(Math.sin(nextTotal / 12) * 6); // Fluctuate WPM between 68 and 80
-        const isErr = Math.random() > 0.95;
+        const isErr = charIndex % 23 === 0;
         const errors = isErr ? [...prev.errorKeys, code] : prev.errorKeys;
         const rawAccuracy = Math.round(((nextTotal - errors.length) / nextTotal) * 100);
         return {
@@ -116,37 +149,7 @@ export default function Home() {
     }, 450);
 
     return () => clearInterval(interval);
-  }, [isSimulating]);
-
-  const handleKeystroke = async (e: KeystrokeEvent) => {
-    setLatestKeystroke(e);
-
-    // Native encryption and API persistence flow
-    try {
-      const cryptoResult = await encryptEvent({ key: e.key, code: e.code });
-      
-      const payload = {
-        key: e.key,
-        code: e.code,
-        timestamp: e.timestamp,
-        isCorrect: e.isCorrect,
-        app: currentApp,
-        encrypted: cryptoResult.ciphertext,
-      };
-
-      // POST to our local endpoint, writing logs to keystroke_logs.jsonl
-      await fetch("/api/logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events: [payload] }),
-      });
-
-      // Toggle refresh trigger to hot-reload LogSearch panel
-      setLogRefreshTrigger((prev) => !prev);
-    } catch (err) {
-      console.error("Failed to persist keystroke event:", err);
-    }
-  };
+  }, [isSimulating, handleKeystroke]);
 
   const handleStatsUpdate = (newStats: typeof stats) => {
     setStats(newStats);
@@ -232,7 +235,7 @@ export default function Home() {
                 className="typing-paper"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. vanka"
+                placeholder="e.g. demo-operator"
                 style={{ minHeight: "45px", padding: "10px", lineHeight: "24px" }}
                 required
               />
@@ -338,7 +341,7 @@ export default function Home() {
               AegisKey // Keystroke Analytics & AI Threat Shield
             </Typography>
             <Typography variant="body2" sx={{ color: "var(--text-secondary)", mt: 0.5, fontStyle: "italic" }}>
-              Technical design prototype detailing local keystroke biometrics, real AES-GCM encryption, and AI security diagnostics.
+              Technical design prototype: browser sandbox telemetry, local derived metrics, and encrypted event envelopes. Simulated security scenarios are clearly labeled.
             </Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -451,7 +454,7 @@ export default function Home() {
                   </span>
                 </Box>
                 <Typography variant="body2" sx={{ color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                  AegisKey implements a robust zero-trust pipeline. When a key is pressed, the local agent captures the raw code, performs standard <strong>AES-GCM encryption</strong> in the browser sandbox, sends the encrypted payload through an event queue to the backend Spanner database, and triggers <strong>Vertex AI behavior biometrics</strong> (typing cadence models) to detect credential leaks and credential hijacking.
+                  AegisKey is a browser-based architecture prototype. The typing sandbox derives local metrics and encrypts each event into an AES-256-GCM envelope before sending it to the demo ingestion API. The current repository does not include an OS-level agent, managed queue, Spanner database, or Vertex AI model; those are documented production extension points rather than active dependencies.
                 </Typography>
               </Box>
 
@@ -477,7 +480,7 @@ export default function Home() {
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Activity size={18} color="var(--accent-olive-dark)" />
                 <span className="sketch-title" style={{ fontSize: "1.2rem" }}>
-                  [Vertex_AI_Biometrics_Deep_Dive]
+                  [Derived_Metrics_Deep_Dive]
                 </span>
               </Box>
               <Typography variant="body2" sx={{ color: "var(--text-secondary)", lineHeight: "1.6" }}>
@@ -490,7 +493,7 @@ export default function Home() {
                     1. Dwell Time (Key Hold Time)
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-                    The duration between when a key is pressed down and when it is released. Standard baseline: 75ms.
+                    The browser prototype does not collect keydown-to-keyup dwell time. A production agent could add this metric with explicit consent.
                   </Typography>
                 </Box>
                 <Box>
@@ -498,7 +501,7 @@ export default function Home() {
                     2. Flight Time (Key Transition Delay)
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-                    The duration between releasing one key and pressing the next key. Baseline average: 110ms.
+                    The browser prototype does not establish a user baseline. A production agent could derive transition timing after calibration and retention controls.
                   </Typography>
                 </Box>
                 <Box>
@@ -519,7 +522,7 @@ export default function Home() {
                   <Box sx={{ width: "70%", height: "100%", backgroundColor: "var(--accent-olive-medium)" }} />
                   <Box sx={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Typography variant="caption" sx={{ fontWeight: 700, fontSize: "9px" }}>
-                      70% Focus Goal Achieved (4.2 / 6 Hours Active)
+                      Focus duration unavailable in browser-only mode
                     </Typography>
                   </Box>
                 </Box>
@@ -545,25 +548,25 @@ export default function Home() {
               
               <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)", mb: 1 }}>
-                  Baseline Owner Profile: <span style={{ color: "var(--accent-olive-medium)" }}>vanka</span>
+                  Identity Baseline: <span style={{ color: "var(--accent-olive-medium)" }}>Not configured</span>
                 </Typography>
                 
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, fontFamily: "var(--font-mono)", fontSize: "12px" }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Profile Calibration Accuracy:</span>
-                    <span style={{ fontWeight: 700 }}>99.2%</span>
+                    <span style={{ fontWeight: 700 }}>N/A</span>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Baseline Typing Speed:</span>
-                    <span style={{ fontWeight: 700 }}>78 WPM</span>
+                    <span style={{ fontWeight: 700 }}>{stats.wpm} WPM (current)</span>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Dwell-Time Jitter Baseline:</span>
-                    <span style={{ fontWeight: 700 }}>&plusmn;12ms</span>
+                    <span style={{ fontWeight: 700 }}>N/A</span>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Preferred Capitalizer hand:</span>
-                    <span style={{ fontWeight: 700 }}>Left Shift (82%)</span>
+                    <span style={{ fontWeight: 700 }}>N/A</span>
                   </Box>
                 </Box>
               </Box>
@@ -571,7 +574,7 @@ export default function Home() {
               {/* Hand-drawn sketch diagram of typing curves */}
               <Box sx={{ border: "1.5px solid var(--border-color)", borderRadius: "6px", p: 2, height: "180px", display: "flex", flexDirection: "column", gap: 1 }}>
                 <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 600 }}>
-                  Keystroke dynamics dwell-time signature curve (baseline vs current):
+                  Keystroke dynamics signature: unavailable until a consented agent collects dwell and flight timings.
                 </Typography>
                 <Box sx={{ flex: 1, position: "relative", mt: 1 }}>
                   {/* Drawing curve as SVG */}
@@ -640,44 +643,44 @@ export default function Home() {
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
                 <Box sx={{ p: 2, border: "1.5px solid var(--border-color)", borderRadius: "6px" }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)" }}>
-                    Pub/Sub Ingestion Shards
+                    Production Queue Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Topic: `keystroke-ingest-prod`
+                    Managed queue: not connected in this repository
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
-                    Active Shards: 64 Partitioned
+                    Required controls: partitioning, back-pressure, dead-letter handling
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--accent-olive-medium)", fontWeight: 600, display: "block", mt: 1 }}>
-                    Status: Nominal (0 message lag)
+                    Status: design-only / not active
                   </Typography>
                 </Box>
                 <Box sx={{ p: 2, border: "1.5px solid var(--border-color)", borderRadius: "6px" }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)" }}>
-                    Spanner Storage Partition
+                    Production Database Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Instance: `aegiskey-db-regional`
+                    Database: not connected; local development uses append-only file storage
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
-                    Write rate: ~4.2M rows/sec peak
+                    Required controls: tenant isolation, indexes, retention, encryption at rest
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--accent-olive-medium)", fontWeight: 600, display: "block", mt: 1 }}>
-                    Disk Util: 14.8% SLA Validated
+                    Status: design-only / not measured
                   </Typography>
                 </Box>
                 <Box sx={{ p: 2, border: "1.5px solid var(--border-color)", borderRadius: "6px" }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)" }}>
-                    Vertex AI Pipeline Model
+                    Behavior Model Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Base: JAX Transformer-12L
+                    Model: not connected; current scoring is deterministic local heuristics
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
-                    Inference latency: 4.8ms average
+                    Required controls: consent, drift monitoring, bias evaluation, abstention
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--accent-olive-medium)", fontWeight: 600, display: "block", mt: 1 }}>
-                    Accuracy rate: 99.8% (False Positive &lt; 0.01%)
+                    Status: design-only / no accuracy claim
                   </Typography>
                 </Box>
               </Box>
@@ -696,7 +699,7 @@ export default function Home() {
           }}
         >
           <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-            AEGISKEY // GOOGLE CLOUD SECURITY & VERTEX AI SYSTEM DESIGN SPECIFICATION v2.8 // DEVELOPED FOR INTEGRITY TESTING.
+            AEGISKEY // BROWSER PROTOTYPE // ENCRYPTED EVENT ENVELOPES + DERIVED SESSION METRICS // NO OS AGENT OR AI SERVICE CONNECTED
           </Typography>
         </Box>
 

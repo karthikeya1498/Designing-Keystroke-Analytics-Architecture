@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Box, Typography, Grid } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { Keyboard, Laptop, Shield, Shuffle, Database, Cpu, LayoutDashboard, Terminal } from "lucide-react";
 import { encryptEvent } from "../utils/crypto";
 
@@ -26,11 +26,11 @@ interface LogEntry {
 const PIPELINE_NODES = [
   { id: "key", label: "Keyboard", icon: Keyboard },
   { id: "agent", label: "Local Agent", icon: Laptop },
-  { id: "crypto", label: "AES-256", icon: Shield },
-  { id: "queue", label: "Event Queue", icon: Shuffle },
-  { id: "api", label: "Backend API", icon: Cpu },
-  { id: "db", label: "Spanner DB", icon: Database },
-  { id: "ai", label: "Vertex AI", icon: Shield },
+  { id: "crypto", label: "AES-256-GCM Envelope", icon: Shield },
+  { id: "queue", label: "Client Queue", icon: Shuffle },
+  { id: "api", label: "Validated API", icon: Cpu },
+  { id: "db", label: "Encrypted Event Store", icon: Database },
+  { id: "ai", label: "Local Metrics", icon: Shield },
   { id: "dash", label: "Dashboard", icon: LayoutDashboard },
 ];
 
@@ -59,6 +59,8 @@ export default function PipelineVisualizer({ latestKeystroke }: PipelineVisualiz
 
     // Trigger visual pipeline flow animation
     let currentNode = 0;
+    // The state update intentionally starts a visual synchronization sequence.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveNode(0);
     
     const interval = setInterval(() => {
@@ -93,19 +95,19 @@ export default function PipelineVisualizer({ latestKeystroke }: PipelineVisualiz
         {
           id: `${seq}-2`,
           timestamp: timestampStr,
-          message: `[Local Agent] Encrypted payload. IV: ${cryptoResult.iv.slice(0, 10)}... Key: ${cryptoResult.keyHex.slice(0, 12)}...`,
+          message: `[Browser Agent] AES-256-GCM envelope created. IV: ${cryptoResult.iv.slice(0, 10)}... Key material remains non-extractable.`,
           type: "encrypt",
         },
         {
           id: `${seq}-3`,
           timestamp: timestampStr,
-          message: `[Pipeline] Ciphertext: 0x${cryptoResult.ciphertext.slice(0, 18)}... Size: ${cryptoResult.ciphertext.length / 2} bytes. Transmitted.`,
+          message: `[API] Encrypted envelope validated. Ciphertext size: ${cryptoResult.ciphertext.length / 2} bytes. Metadata transmitted.`,
           type: "api",
         },
         {
           id: `${seq}-4`,
           timestamp: timestampStr,
-          message: `[Vertex AI] Cadence matched owner profile. Security risk score: ${(Math.random() * 2).toFixed(2)}% (Secure).`,
+          message: `[Local Metrics] ${latestKeystroke.isCorrect ? "Correct input recorded" : "Correction signal recorded"}; no AI inference is claimed by this prototype.`,
           type: "ai",
         },
       ];
@@ -219,9 +221,9 @@ export default function PipelineVisualizer({ latestKeystroke }: PipelineVisualiz
       {/* Blueprint Scrolling Console Terminal */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Terminal size={16} color="var(--accent-olive-dark)" />
+            <Terminal size={16} color="var(--accent-olive-dark)" />
           <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)" }}>
-            Local Agent / Endpoint Security Audit Logs
+            Browser Sandbox / Encrypted Ingestion Audit Logs
           </Typography>
         </Box>
         
@@ -229,7 +231,7 @@ export default function PipelineVisualizer({ latestKeystroke }: PipelineVisualiz
           {logs.length === 0 ? (
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-secondary)", opacity: 0.6 }}>
               <Typography variant="body2" sx={{ fontFamily: "var(--font-mono)" }}>
-                // Awaiting keystroke events from Sandbox. Type above to stream packets...
+                {"// Awaiting keystroke events from Sandbox. Type above to stream packets..."}
               </Typography>
             </Box>
           ) : (

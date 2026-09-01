@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Box, Typography, Button } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { ShieldAlert, ShieldCheck, Key, UserCheck, AlertOctagon, Info, FileText } from "lucide-react";
 
 interface Alert {
@@ -21,15 +21,15 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
     {
       id: "1",
       time: "19:05:04",
-      title: "Local Agent Initialized",
-      desc: "Keystroke monitoring daemon started on port 8084. AES-256-GCM symmetric key negotiation complete.",
+      title: "Browser Prototype Initialized",
+      desc: "Browser typing sandbox ready. Event encryption uses a non-extractable local AES-256-GCM key; no OS daemon is running.",
       severity: "info",
     },
     {
       id: "2",
       time: "19:06:12",
-      title: "Biometric Cadence Calibrated",
-      desc: "Baseline typing cadence profile established for user 'vanka' (78 WPM baseline, 96.4% baseline accuracy).",
+      title: "Derived Metrics Available",
+      desc: "Session metrics are derived from observed sandbox input. No user identity or behavioral baseline has been calibrated.",
       severity: "info",
     },
   ]);
@@ -42,8 +42,8 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
       newAlert = {
         id: Date.now().toString(),
         time: timeStr,
-        title: "CRITICAL: Plaintext Credential Leak",
-        desc: "Endpoint agent intercepted and blocked high-entropy AWS secret API key typed in public chat buffer: 'AKIAIOSFODNN7EXAMPLE'.",
+        title: "SIMULATION: Credential Leak Scenario",
+        desc: "Synthetic scenario only. The browser prototype does not inspect other applications, clipboard contents, or credentials.",
         severity: "critical",
       };
       onStatusChange("critical");
@@ -51,8 +51,8 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
       newAlert = {
         id: Date.now().toString(),
         time: timeStr,
-        title: "WARNING: High-Risk Insider Activity",
-        desc: "Unusual off-hours active typing context. Repeated command executions (pg_dump, git push --force) coupled with high context switching (22 windows/min).",
+        title: "SIMULATION: High-Risk Activity",
+        desc: "Synthetic scenario only. This repository does not observe command execution, windows, working hours, or context switching.",
         severity: "warning",
       };
       onStatusChange("warning");
@@ -60,8 +60,8 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
       newAlert = {
         id: Date.now().toString(),
         time: timeStr,
-        title: "CRITICAL: Behavioral Dynamics Mismatch",
-        desc: "Vertex AI typing cadence model detected 84% variance from owner's typing template (dwell time & flight time mismatch). Potential session hijack.",
+        title: "SIMULATION: Cadence Mismatch",
+        desc: "Synthetic scenario only. No Vertex AI model or identity baseline is connected; dwell and flight times are not collected.",
         severity: "critical",
       };
       onStatusChange("critical");
@@ -92,7 +92,7 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <ShieldAlert size={20} color="var(--accent-olive-dark)" />
           <span className="sketch-title" style={{ fontSize: "1.3rem" }}>
-            [AI_Security_Detection_Center]
+            [Security_Scenario_Simulator]
           </span>
         </Box>
       </Box>
@@ -100,7 +100,7 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
       {/* Interactive Threat Simulator Control Board */}
       <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
         <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)", mb: 1.5 }}>
-          Endpoint Threat Vectors Simulator
+          Synthetic threat scenarios (not an OS agent or AI detector)
         </Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           <button className="sketch-btn" onClick={() => triggerThreat("credential")}>
@@ -127,7 +127,7 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <FileText size={16} color="var(--accent-olive-dark)" />
           <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)" }}>
-            Real-Time Detections Stream
+            Scenario Event Stream
           </Typography>
         </Box>
 

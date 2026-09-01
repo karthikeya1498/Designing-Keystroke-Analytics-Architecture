@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Box, Typography, Button, IconButton } from "@mui/material";
+import { Box, Typography, IconButton } from "@mui/material";
 import { RotateCcw, AlertTriangle } from "lucide-react";
 
 // QWERTY layout matching event.code
@@ -91,7 +91,7 @@ const HISTORICAL_ERROR_RATES: { [key: string]: number } = {
 
 const SAMPLE_TEXTS = [
   "The quick brown fox jumps over the lazy dog.",
-  "Vertex AI analyzes keystroke behavior to prevent data leaks.",
+  "Local metrics summarize this browser typing session.",
   "Encryption via AES-256 secures endpoints from insider threats.",
   "High WPM and steady cadence show high focus and low fatigue.",
 ];
@@ -115,7 +115,6 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
   
   // Typing metrics tracking
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [totalKeysPressed, setTotalKeysPressed] = useState(0);
   const [backspaceCount, setBackspaceCount] = useState(0);
   const [errorKeysList, setErrorKeysList] = useState<string[]>([]);
   
@@ -136,8 +135,6 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
       
       // Calculate correctness based on text position
       if (textareaRef.current === document.activeElement) {
-        setTotalKeysPressed((prev) => prev + 1);
-
         const currentPos = typedText.length;
         const targetChar = targetText[currentPos];
         const typedChar = e.key;
@@ -186,12 +183,14 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
     
     // Start timing on first keypress
     if (!startTime && value.length > 0) {
+      // eslint-disable-next-line react-hooks/purity
       setStartTime(Date.now());
     }
 
     setTypedText(value);
 
     // Compute metrics
+    // eslint-disable-next-line react-hooks/purity
     const elapsedMinutes = startTime ? (Date.now() - startTime) / 60000 : 0.01;
     const wordCount = value.length / 5;
     const rawWpm = startTime ? Math.round(wordCount / elapsedMinutes) : 0;
@@ -223,7 +222,6 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
   const handleReset = () => {
     setTypedText("");
     setStartTime(null);
-    setTotalKeysPressed(0);
     setBackspaceCount(0);
     setErrorKeysList([]);
     onStatsUpdate({

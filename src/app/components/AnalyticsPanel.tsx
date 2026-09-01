@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import { Box, Typography } from "@mui/material";
-import { Gauge, Hourglass, HelpCircle, Activity } from "lucide-react";
+import { Gauge, Hourglass, Activity } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -27,41 +27,18 @@ interface AnalyticsPanelProps {
 }
 
 export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
-  const [wpmHistory, setWpmHistory] = useState<number[]>([65, 72, 68, 75, 80, 78, 82, 85, 79, 81]);
-  const [labels, setLabels] = useState<string[]>(Array.from({ length: 10 }, (_, i) => `T-${10 - i}s`));
-  const [fatigue, setFatigue] = useState<number>(18);
-  const [focusTime, setFocusTime] = useState<number>(4.2);
-  const [contextSwitches, setContextSwitches] = useState<number>(8);
-
-  // Periodically capture WPM to create WPM line trend
-  useEffect(() => {
-    // Only capture if user is active (wpm > 0)
-    const interval = setInterval(() => {
-      if (stats.wpm > 0) {
-        setWpmHistory((prev) => [...prev.slice(1), stats.wpm]);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [stats.wpm]);
-
-  // Dynamically calculate Fatigue Index based on accuracy and keystrokes
-  useEffect(() => {
-    if (stats.totalKeys === 0) {
-      setFatigue(15); // Rested baseline
-      return;
-    }
-    
-    // Fatigue goes up as accuracy drops and keys increase
+  const wpmHistory = stats.wpm > 0 ? [stats.wpm] : [];
+  const labels = stats.wpm > 0 ? ["Current"] : [];
+  const fatigue = useMemo(() => {
+    if (stats.totalKeys === 0) return 0;
     const errorRatio = stats.errorKeys.length / Math.max(1, stats.totalKeys);
     const accuracyFactor = (100 - stats.accuracy) * 3;
-    const computedFatigue = Math.round(15 + accuracyFactor + errorRatio * 20);
-    setFatigue(Math.max(10, Math.min(computedFatigue, 95)));
+    return Math.max(0, Math.min(Math.round(15 + accuracyFactor + errorRatio * 20), 95));
   }, [stats.accuracy, stats.totalKeys, stats.errorKeys]);
 
   // Chart configuration
   const chartData = {
-    labels: labels,
+    labels,
     datasets: [
       {
         fill: true,
@@ -128,10 +105,9 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
 
   const fatigueStatus = getFatigueStatus(fatigue);
 
-  // Generate 24 columns for active hours heatmap
-  const hourlyActivity = [
-    5, 2, 0, 0, 0, 0, 10, 40, 75, 90, 85, 60, 45, 80, 95, 70, 50, 30, 20, 15, 60, 85, 30, 10
-  ];
+  // A browser sandbox cannot observe a 24-hour workstation history. Keep the
+  // visualization empty rather than presenting fabricated historical activity.
+  const hourlyActivity = Array.from({ length: 24 }, () => 0);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3, height: "100%" }}>
@@ -253,7 +229,7 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
                 Status: <span style={{ color: fatigueStatus.color }}>{fatigueStatus.text}</span>
               </Typography>
               <Typography variant="caption" sx={{ color: "var(--text-secondary)", maxWidth: "180px", display: "block" }}>
-                Analyzes erratic speeds, dwell time variances, and backspace clusters to monitor cognitive fatigue and focus.
+                Derived from this session&apos;s observed accuracy, error ratio, and key count. Dwell time, focus duration, and behavioral identity models are not collected by this prototype.
               </Typography>
             </Box>
           </Box>
@@ -264,13 +240,13 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Hourglass size={16} color="var(--accent-olive-dark)" />
             <span className="sketch-title" style={{ fontSize: "1.1rem" }}>
-              [Hourly_Activity_Heatmap]
+              [Observed_Session_Activity]
             </span>
           </Box>
 
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
             <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-              Active focus distribution over a 24-hour cycle:
+              No 24-hour focus history is available in this browser-only session.
             </Typography>
 
             {/* Grid block representation */}
