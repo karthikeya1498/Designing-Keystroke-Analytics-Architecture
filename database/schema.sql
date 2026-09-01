@@ -17,6 +17,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   CHECK (ended_at IS NULL OR ended_at >= started_at)
 );
 
+CREATE TABLE IF NOT EXISTS keystroke_events (
+  event_id UUID PRIMARY KEY,
+  session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  sequence_number BIGINT NOT NULL CHECK (sequence_number > 0),
+  event_type TEXT NOT NULL CHECK (event_type IN ('key_press', 'key_release', 'session_summary')),
+  key_code TEXT NOT NULL CHECK (char_length(key_code) BETWEEN 1 AND 64),
+  occurred_at TIMESTAMPTZ NOT NULL,
+  dwell_time_ms INTEGER CHECK (dwell_time_ms IS NULL OR dwell_time_ms BETWEEN 0 AND 60000),
+  inter_key_latency_ms INTEGER CHECK (inter_key_latency_ms IS NULL OR inter_key_latency_ms BETWEEN 0 AND 3600000),
+  is_correction BOOLEAN NOT NULL DEFAULT false,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (session_id, sequence_number)
+);
+
 CREATE TABLE IF NOT EXISTS analytics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -65,6 +79,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS sessions_user_started_idx ON sessions(user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS events_session_sequence_idx ON keystroke_events(session_id, sequence_number);
+CREATE INDEX IF NOT EXISTS events_session_occurred_idx ON keystroke_events(session_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS analytics_session_created_idx ON analytics(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS anomaly_session_created_idx ON anomaly_events(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS security_user_created_idx ON security_alerts(user_id, created_at DESC);

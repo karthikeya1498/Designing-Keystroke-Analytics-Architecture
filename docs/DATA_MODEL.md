@@ -1,11 +1,12 @@
 # AegisKey Data Model
 
-The data model is designed around **sanitized events and aggregates**. There is no column for a typed character, plaintext input, password, clipboard content, or raw key label.
+The data model is designed around **sanitized events and aggregates**. The `keystroke_events` table stores normalized key codes and timing metadata, while `analytics` stores session-level aggregates. There is no column for a typed character, plaintext input, password, clipboard content, or raw key label.
 
 | Entity | Purpose | Sensitive fields |
 | --- | --- | --- |
 | `users` | Identity and RBAC role | Password hash only; never plaintext password |
 | `sessions` | Authenticated telemetry session | User ownership and lifecycle timestamps |
+| `keystroke_events` | Sanitized key-code and timing events | Session ownership, sequence number, dwell and inter-key timing; never raw character content |
 | `analytics` | Session-level derived metrics | WPM, accuracy, timing statistics, anomaly score |
 | `anomaly_events` | Explainable behavioral deviations | Feature name, baseline deviation, risk level |
 | `security_alerts` | User-visible security signals | Severity, explanation, lifecycle status |
