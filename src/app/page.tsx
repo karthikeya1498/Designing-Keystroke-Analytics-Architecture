@@ -7,6 +7,7 @@ import KeyboardSandbox from "./components/KeyboardSandbox";
 import PipelineVisualizer from "./components/PipelineVisualizer";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import SecurityCenter from "./components/SecurityCenter";
+import DashboardNav, { type DashboardTab, type NavigationMode } from "./components/DashboardNav";
 import LogSearch from "./components/LogSearch";
 import { encryptEvent } from "./utils/crypto";
 
@@ -17,11 +18,17 @@ interface KeystrokeEvent {
   isCorrect: boolean;
 }
 
+const DASHBOARD_TABS: DashboardTab[] = ["overview", "analytics", "security", "pipeline", "logs"];
+
 export default function Home() {
   const [latestKeystroke, setLatestKeystroke] = useState<KeystrokeEvent | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "analytics" | "security" | "pipeline" | "logs">("overview");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [navigationMode, setNavigationMode] = useState<NavigationMode>("top");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const dashboardRef = React.useRef<HTMLDivElement>(null);
+  const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
-  const [currentApp, setCurrentApp] = useState("VS Code");
+  const [currentApp, setCurrentApp] = useState("Browser typing sandbox");
   
   // Refresh trigger for log updates
   const [logRefreshTrigger, setLogRefreshTrigger] = useState(false);
@@ -43,6 +50,28 @@ export default function Home() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+
+  const changeDashboardBySwipe = useCallback((direction: "next" | "previous") => {
+    setActiveTab((current) => {
+      const index = DASHBOARD_TABS.indexOf(current);
+      const nextIndex = direction === "next" ? (index + 1) % DASHBOARD_TABS.length : (index - 1 + DASHBOARD_TABS.length) % DASHBOARD_TABS.length;
+      return DASHBOARD_TABS[nextIndex];
+    });
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!document.fullscreenElement) {
+      await dashboardRef.current?.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -280,7 +309,15 @@ export default function Home() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box ref={dashboardRef} className={`aegiskey-shell ${isFullscreen ? "is-fullscreen" : ""}`} sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }} onTouchStart={(event) => {
+      if (event.touches.length >= 2) touchStartRef.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }} onTouchEnd={(event) => {
+      if (!touchStartRef.current || event.changedTouches.length === 0) return;
+      const deltaX = event.changedTouches[0].clientX - touchStartRef.current.x;
+      const deltaY = event.changedTouches[0].clientY - touchStartRef.current.y;
+      touchStartRef.current = null;
+      if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY)) changeDashboardBySwipe(deltaX < 0 ? "next" : "previous");
+    }}>
       {/* Top Banner Status Bar */}
       <Box 
         sx={{ 
@@ -322,7 +359,7 @@ export default function Home() {
       </Box>
 
       {/* Main Container */}
-      <Container maxWidth="xl" sx={{ py: 4, flexGrow: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+      <Container maxWidth="xl" className={`dashboard-content ${navigationMode === "sidebar" ? "has-sidebar" : ""}`} sx={{ py: 4, flexGrow: 1, display: "flex", flexDirection: "column", gap: 3 }}>
         
         {/* Drafting Board Header */}
         <Box 
@@ -338,7 +375,7 @@ export default function Home() {
         >
           <Box>
             <Typography variant="h4" className="sketch-title" sx={{ fontWeight: 700 }}>
-              AegisKey // Keystroke Analytics & AI Threat Shield
+              AegisKey // Keystroke Analytics & Security Telemetry
             </Typography>
             <Typography variant="body2" sx={{ color: "var(--text-secondary)", mt: 0.5, fontStyle: "italic" }}>
               Technical design prototype: browser sandbox telemetry, local derived metrics, and encrypted event envelopes. Simulated security scenarios are clearly labeled.
@@ -378,63 +415,11 @@ export default function Home() {
           </Box>
         </Box>
 
-        {/* Tab Navigation & Live Simulator Toggle */}
-        <Box sx={{ display: "flex", gap: 1.5, borderBottom: "1.5px dashed var(--border-color-light)", pb: 2, flexWrap: "wrap", alignItems: "center" }}>
-          <button 
-            className={`sketch-btn ${activeTab === "overview" ? "active" : ""}`} 
-            onClick={() => setActiveTab("overview")}
-          >
-            [01_Overview]
-          </button>
-          <button 
-            className={`sketch-btn ${activeTab === "analytics" ? "active" : ""}`} 
-            onClick={() => setActiveTab("analytics")}
-          >
-            [02_Analytics]
-          </button>
-          <button 
-            className={`sketch-btn ${activeTab === "security" ? "active" : ""}`} 
-            onClick={() => setActiveTab("security")}
-          >
-            [03_AI_Shield]
-          </button>
-          <button 
-            className={`sketch-btn ${activeTab === "logs" ? "active" : ""}`} 
-            onClick={() => setActiveTab("logs")}
-          >
-            [04_Log_Search]
-          </button>
-          <button 
-            className={`sketch-btn ${activeTab === "pipeline" ? "active" : ""}`} 
-            onClick={() => setActiveTab("pipeline")}
-          >
-            [05_Debugger]
-          </button>
-
-          {/* Spacer */}
-          <Box sx={{ flexGrow: 1 }} />
-
-          {/* Live Simulator Button */}
-          <button 
-            className="sketch-btn" 
-            onClick={() => setIsSimulating(!isSimulating)}
-            style={{ 
-              borderColor: isSimulating ? "var(--accent-olive-medium)" : "var(--border-color)",
-              backgroundColor: isSimulating ? "var(--accent-olive-pale)" : "transparent",
-              color: isSimulating ? "var(--accent-olive-medium)" : "var(--text-primary)"
-            }}
-          >
-            <Box 
-              sx={{ 
-                width: 8, 
-                height: 8, 
-                borderRadius: "50%", 
-                backgroundColor: isSimulating ? "var(--accent-olive-medium)" : "var(--border-color-light)", 
-                mr: 1, 
-                display: "inline-block", 
-                animation: isSimulating ? "ping 1.2s infinite" : "none" 
-              }} 
-            />
+        <DashboardNav activeTab={activeTab} onTabChange={setActiveTab} mode={navigationMode} onModeChange={setNavigationMode} isFullscreen={isFullscreen} onFullscreen={() => void toggleFullscreen()} />
+        <Box className="simulator-toolbar">
+          <span className="gesture-status">Swipe with two fingers horizontally to change dashboards</span>
+          <button className="sketch-btn" onClick={() => setIsSimulating((active) => !active)} style={{ borderColor: isSimulating ? "var(--accent-olive-medium)" : "var(--border-color)", backgroundColor: isSimulating ? "var(--accent-olive-pale)" : "transparent", color: isSimulating ? "var(--accent-olive-medium)" : "var(--text-primary)" }}>
+            <span className={`simulator-dot ${isSimulating ? "active" : ""}`} />
             {isSimulating ? "[Simulator: ACTIVE]" : "[Simulate_Live_Endpoint]"}
           </button>
         </Box>
