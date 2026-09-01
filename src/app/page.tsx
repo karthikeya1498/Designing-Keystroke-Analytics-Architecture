@@ -10,12 +10,14 @@ import SecurityCenter from "./components/SecurityCenter";
 import DashboardNav, { type DashboardTab, type NavigationMode } from "./components/DashboardNav";
 import LogSearch from "./components/LogSearch";
 import { encryptEvent } from "./utils/crypto";
+import type { SanitizedKeystrokeEvent } from "../domain/events/models";
 
 interface KeystrokeEvent {
   key: string;
   code: string;
   timestamp: number;
   isCorrect: boolean;
+  telemetry?: SanitizedKeystrokeEvent | null;
 }
 
 const DASHBOARD_TABS: DashboardTab[] = ["overview", "analytics", "security", "pipeline", "logs"];
@@ -100,13 +102,17 @@ export default function Home() {
 
   const handleKeystroke = useCallback(async (e: KeystrokeEvent) => {
     setLatestKeystroke(e);
+    if (!e.telemetry) return;
 
     try {
       const encrypted = await encryptEvent({
-        key: e.key,
-        code: e.code,
-        timestamp: e.timestamp,
-        isCorrect: e.isCorrect,
+        sessionId: e.telemetry?.sessionId ?? "simulator-session",
+        sequenceNumber: e.telemetry?.sequenceNumber ?? 0,
+        eventType: e.telemetry?.eventType ?? "session_summary",
+        keyCode: e.telemetry?.keyCode ?? e.code,
+        dwellTimeMs: e.telemetry?.dwellTimeMs ?? null,
+        interKeyLatencyMs: e.telemetry?.interKeyLatencyMs ?? null,
+        isCorrection: e.telemetry?.isCorrection ?? false,
       });
 
       const response = await fetch("/api/logs", {

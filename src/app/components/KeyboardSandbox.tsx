@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Typography, IconButton } from "@mui/material";
 import { RotateCcw, AlertTriangle } from "lucide-react";
+import { SanitizedTelemetryCollector } from "../../domain/events/TelemetryCollector";
 
 // QWERTY layout matching event.code
 const KEYBOARD_LAYOUT = [
@@ -102,6 +103,7 @@ interface KeyboardSandboxProps {
     code: string;
     timestamp: number;
     isCorrect: boolean;
+    telemetry: ReturnType<SanitizedTelemetryCollector["keyDown"]>;
   }) => void;
   onStatsUpdate: (stats: { wpm: number; accuracy: number; totalKeys: number; errorKeys: string[] }) => void;
 }
@@ -119,6 +121,7 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
   const [errorKeysList, setErrorKeysList] = useState<string[]>([]);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [telemetryCollector] = useState(() => new SanitizedTelemetryCollector());
 
   // Focus textarea on load
   useEffect(() => {
@@ -154,18 +157,20 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
           }
 
           // Trigger pipeline notification
-          onKeystroke({
-            key: typedChar,
-            code: e.code,
-            timestamp: Date.now(),
-            isCorrect,
-          });
+          const telemetry = telemetryCollector.keyDown({ keyCode: e.code, timestamp: Date.now(), isCorrection: typedChar === "Backspace" });
+          if (telemetry) {
+            onKeystroke({ key: typedChar, code: e.code, timestamp: telemetry.timestamp, isCorrect, telemetry });
+          }
         }
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       setActiveKeys((prev) => ({ ...prev, [e.code]: false }));
+      if (textareaRef.current === document.activeElement) {
+        const telemetry = telemetryCollector.keyUp({ keyCode: e.code, timestamp: Date.now() });
+        if (telemetry) onKeystroke({ key: "", code: e.code, timestamp: telemetry.timestamp, isCorrect: true, telemetry });
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -175,7 +180,7 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [typedText, targetText, onKeystroke]);
+  }, [typedText, targetText, onKeystroke, telemetryCollector]);
 
   // Handle input text changes
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -224,6 +229,7 @@ export default function KeyboardSandbox({ onKeystroke, onStatsUpdate }: Keyboard
     setStartTime(null);
     setBackspaceCount(0);
     setErrorKeysList([]);
+    telemetryCollector.reset();
     onStatsUpdate({
       wpm: 0,
       accuracy: 100,
