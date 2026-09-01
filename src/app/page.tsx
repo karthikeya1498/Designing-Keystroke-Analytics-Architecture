@@ -13,6 +13,9 @@ import { encryptEvent } from "./utils/crypto";
 import type { SanitizedKeystrokeEvent } from "../domain/events/models";
 import { BehavioralModelPipeline } from "../domain/analytics/BehavioralModelPipeline";
 import type { BehavioralFeatureVector } from "../domain/analytics/FeatureExtractor";
+import { buildBaseline } from "../domain/security/AnomalyDetector";
+import { scoreContinuousAuthentication } from "../domain/security/ContinuousAuthentication";
+import type { ContinuousAuthenticationSnapshot } from "../domain/security/models";
 
 interface KeystrokeEvent {
   key: string;
@@ -52,6 +55,11 @@ export default function Home() {
     pipeline.ingestBatch(telemetryEvents);
     return pipeline.snapshot();
   }, [telemetryEvents]);
+  const authenticationSnapshot = useMemo<ContinuousAuthenticationSnapshot | null>(() => {
+    if (!behavioralFeatures) return null;
+    const baseline = buildBaseline(behavioralFeatures.userId, []);
+    return scoreContinuousAuthentication(baseline, behavioralFeatures);
+  }, [behavioralFeatures]);
 
   // Global security health state
   const [securityStatus, setSecurityStatus] = useState<"secure" | "warning" | "critical">("secure");
@@ -474,7 +482,7 @@ export default function Home() {
             </Box>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              <SecurityCenter onStatusChange={handleStatusChange} />
+              <SecurityCenter onStatusChange={handleStatusChange} authentication={authenticationSnapshot} />
               <AnalyticsPanel stats={stats} features={behavioralFeatures} />
             </Box>
           </Box>
@@ -546,7 +554,7 @@ export default function Home() {
         {activeTab === "security" && (
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "5fr 7fr" }, gap: 3, alignItems: "start" }}>
             <Box>
-              <SecurityCenter onStatusChange={handleStatusChange} />
+              <SecurityCenter onStatusChange={handleStatusChange} authentication={authenticationSnapshot} />
             </Box>
 
             <Box className="sketch-card" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>

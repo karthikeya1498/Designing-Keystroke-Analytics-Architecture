@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { ShieldAlert, ShieldCheck, Key, UserCheck, AlertOctagon, Info, FileText } from "lucide-react";
+import type { ContinuousAuthenticationSnapshot } from "../../domain/security/models";
 
 interface Alert {
   id: string;
@@ -14,9 +15,10 @@ interface Alert {
 
 interface SecurityCenterProps {
   onStatusChange: (status: "secure" | "warning" | "critical") => void;
+  authentication?: ContinuousAuthenticationSnapshot | null;
 }
 
-export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) {
+export default function SecurityCenter({ onStatusChange, authentication }: SecurityCenterProps) {
   const [alerts, setAlerts] = useState<Alert[]>([
     {
       id: "1",
@@ -61,7 +63,7 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
         id: Date.now().toString(),
         time: timeStr,
         title: "SIMULATION: Cadence Mismatch",
-        desc: "Synthetic scenario only. No Vertex AI model or identity baseline is connected; dwell and flight times are not collected.",
+        desc: "Synthetic scenario only. The local Phase 4 scorer can compare timing against a baseline once enough consented sessions are available.",
         severity: "critical",
       };
       onStatusChange("critical");
@@ -96,6 +98,29 @@ export default function SecurityCenter({ onStatusChange }: SecurityCenterProps) 
           </span>
         </Box>
       </Box>
+
+      {authentication && (
+        <Box sx={{ p: 2, border: "1.5px solid var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--bg-primary)" }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)", mb: 1 }}>
+            Continuous Authentication Status
+          </Typography>
+          <Typography variant="body2" sx={{ fontFamily: "var(--font-mono)", color: authentication.riskLevel === "BASELINE_BUILDING" ? "var(--accent-olive-medium)" : "var(--text-primary)" }}>
+            {authentication.riskLevel === "BASELINE_BUILDING" ? authentication.assessment.explanation : `Trust ${authentication.trustScore?.toFixed(2)}% · Risk ${authentication.riskScore?.toFixed(2)}%`}
+          </Typography>
+          <Typography variant="caption" sx={{ display: "block", color: "var(--text-secondary)", mt: 0.75 }}>
+            Explainable timing comparison only. This signal does not prove identity or make an access-control decision.
+          </Typography>
+          {authentication.assessment.signals.length > 0 && (
+            <Box sx={{ mt: 1 }}>
+              {authentication.assessment.signals.map((signal) => (
+                <Typography key={signal.metric} variant="caption" sx={{ display: "block", color: "var(--text-secondary)" }}>
+                  {signal.explanation}
+                </Typography>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Interactive Threat Simulator Control Board */}
       <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
