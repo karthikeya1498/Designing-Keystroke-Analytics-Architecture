@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Typography, Container } from "@mui/material";
 import { ShieldCheck, ShieldAlert, AlertTriangle, Cpu, Activity, Shield, Terminal } from "lucide-react";
 import KeyboardSandbox from "./components/KeyboardSandbox";
@@ -11,6 +11,8 @@ import DashboardNav, { type DashboardTab, type NavigationMode } from "./componen
 import LogSearch from "./components/LogSearch";
 import { encryptEvent } from "./utils/crypto";
 import type { SanitizedKeystrokeEvent } from "../domain/events/models";
+import { BehavioralModelPipeline } from "../domain/analytics/BehavioralModelPipeline";
+import type { BehavioralFeatureVector } from "../domain/analytics/FeatureExtractor";
 
 interface KeystrokeEvent {
   key: string;
@@ -42,6 +44,14 @@ export default function Home() {
     totalKeys: 0,
     errorKeys: [] as string[],
   });
+  const [telemetryEvents, setTelemetryEvents] = useState<SanitizedKeystrokeEvent[]>([]);
+  const behavioralFeatures = useMemo<BehavioralFeatureVector | null>(() => {
+    if (telemetryEvents.length === 0) return null;
+    const sessionId = telemetryEvents[0].sessionId;
+    const pipeline = new BehavioralModelPipeline(sessionId, "local-browser-user");
+    pipeline.ingestBatch(telemetryEvents);
+    return pipeline.snapshot();
+  }, [telemetryEvents]);
 
   // Global security health state
   const [securityStatus, setSecurityStatus] = useState<"secure" | "warning" | "critical">("secure");
@@ -102,17 +112,19 @@ export default function Home() {
 
   const handleKeystroke = useCallback(async (e: KeystrokeEvent) => {
     setLatestKeystroke(e);
-    if (!e.telemetry) return;
+    const telemetry = e.telemetry;
+    if (!telemetry) return;
+    setTelemetryEvents((previous) => previous.length === 0 || previous[0].sessionId === telemetry.sessionId ? [...previous, telemetry] : [telemetry]);
 
     try {
       const encrypted = await encryptEvent({
-        sessionId: e.telemetry?.sessionId ?? "simulator-session",
-        sequenceNumber: e.telemetry?.sequenceNumber ?? 0,
-        eventType: e.telemetry?.eventType ?? "session_summary",
-        keyCode: e.telemetry?.keyCode ?? e.code,
-        dwellTimeMs: e.telemetry?.dwellTimeMs ?? null,
-        interKeyLatencyMs: e.telemetry?.interKeyLatencyMs ?? null,
-        isCorrection: e.telemetry?.isCorrection ?? false,
+        sessionId: telemetry.sessionId,
+        sequenceNumber: telemetry.sequenceNumber,
+        eventType: telemetry.eventType,
+        keyCode: telemetry.keyCode,
+        dwellTimeMs: telemetry.dwellTimeMs ?? null,
+        interKeyLatencyMs: telemetry.interKeyLatencyMs ?? null,
+        isCorrection: telemetry.isCorrection,
       });
 
       const response = await fetch("/api/logs", {
@@ -463,7 +475,7 @@ export default function Home() {
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               <SecurityCenter onStatusChange={handleStatusChange} />
-              <AnalyticsPanel stats={stats} />
+              <AnalyticsPanel stats={stats} features={behavioralFeatures} />
             </Box>
           </Box>
         )}
@@ -472,7 +484,7 @@ export default function Home() {
         {activeTab === "analytics" && (
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "7fr 5fr" }, gap: 3, alignItems: "start" }}>
             <Box>
-              <AnalyticsPanel stats={stats} />
+              <AnalyticsPanel stats={stats} features={behavioralFeatures} />
             </Box>
             
             <Box className="sketch-card" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -492,7 +504,7 @@ export default function Home() {
                     1. Dwell Time (Key Hold Time)
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-                    The browser prototype does not collect keydown-to-keyup dwell time. A production agent could add this metric with explicit consent.
+                    Dwell time is derived locally from each matching keydown and keyup. Raw characters are never included in the server-bound event.
                   </Typography>
                 </Box>
                 <Box>
@@ -500,7 +512,7 @@ export default function Home() {
                     2. Flight Time (Key Transition Delay)
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-                    The browser prototype does not establish a user baseline. A production agent could derive transition timing after calibration and retention controls.
+                    Inter-key latency is derived locally from consecutive key transitions. Per-user baseline comparison is intentionally reserved for Phase 5.
                   </Typography>
                 </Box>
                 <Box>
@@ -508,7 +520,7 @@ export default function Home() {
                     3. Fatigue Index Estimation Formula
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", display: "block", mt: 0.5 }}>
-                    Fatigue = &Delta;Dwell_Time + Clustered_Backspaces * 1.5 + &sigma;(Flight_Time)
+                    Fatigue = duration signal + correction signal + pause signal + latency signal
                   </Typography>
                 </Box>
               </Box>

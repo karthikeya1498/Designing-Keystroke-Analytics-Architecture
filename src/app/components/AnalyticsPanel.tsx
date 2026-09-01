@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
+import type { BehavioralFeatureVector } from "../../domain/analytics/FeatureExtractor";
 import { Box, Typography } from "@mui/material";
 import { Gauge, Hourglass, Activity } from "lucide-react";
 import {
@@ -24,17 +25,16 @@ interface AnalyticsPanelProps {
     totalKeys: number;
     errorKeys: string[];
   };
+  features?: BehavioralFeatureVector | null;
 }
 
-export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
-  const wpmHistory = stats.wpm > 0 ? [stats.wpm] : [];
-  const labels = stats.wpm > 0 ? ["Current"] : [];
-  const fatigue = useMemo(() => {
-    if (stats.totalKeys === 0) return 0;
-    const errorRatio = stats.errorKeys.length / Math.max(1, stats.totalKeys);
-    const accuracyFactor = (100 - stats.accuracy) * 3;
-    return Math.max(0, Math.min(Math.round(15 + accuracyFactor + errorRatio * 20), 95));
-  }, [stats.accuracy, stats.totalKeys, stats.errorKeys]);
+export default function AnalyticsPanel({ stats, features }: AnalyticsPanelProps) {
+  const displayWpm = features ? features.estimatedWpm : stats.wpm;
+  const displayAccuracy = features ? features.accuracy * 100 : stats.accuracy;
+  const displayKeyCount = features ? features.keyCount : stats.totalKeys;
+  const fatigue = features ? features.fatigueScore : 0;
+  const wpmHistory = displayWpm > 0 ? [displayWpm] : [];
+  const labels = displayWpm > 0 ? [features ? "Observed" : "Current"] : [];
 
   // Chart configuration
   const chartData = {
@@ -107,18 +107,18 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
 
   // A browser sandbox cannot observe a 24-hour workstation history. Keep the
   // visualization empty rather than presenting fabricated historical activity.
-  const hourlyActivity = Array.from({ length: 24 }, () => 0);
+  const hourlyActivity: number[] = [];
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3, height: "100%" }}>
       {/* Real-time stats header row */}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(6, 1fr)" }, gap: 2 }}>
         <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
           <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 500 }}>
             Speed (WPM)
           </Typography>
           <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem" }}>
-            {stats.wpm}
+            {displayWpm.toFixed(2)}
           </Typography>
         </Box>
         <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
@@ -126,7 +126,7 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
             Accuracy
           </Typography>
           <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem" }}>
-            {stats.accuracy}%
+            {displayAccuracy.toFixed(2)}%
           </Typography>
         </Box>
         <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
@@ -134,7 +134,7 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
             Keys Typed
           </Typography>
           <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem" }}>
-            {stats.totalKeys}
+            {displayKeyCount}
           </Typography>
         </Box>
         <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
@@ -143,6 +143,18 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
           </Typography>
           <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem", color: fatigueStatus.color }}>
             {fatigue}%
+          </Typography>
+        </Box>
+        <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
+          <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 500 }}>Mean Dwell</Typography>
+          <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem" }}>
+            {features?.meanDwellMs === null || features?.meanDwellMs === undefined ? "—" : `${features.meanDwellMs.toFixed(0)}ms`}
+          </Typography>
+        </Box>
+        <Box className="sketch-card" sx={{ p: 2, textAlign: "center" }}>
+          <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 500 }}>Mean Latency</Typography>
+          <Typography variant="h3" className="sketch-title" sx={{ mt: 0.5, fontSize: "1.8rem" }}>
+            {features?.meanInterKeyMs === null || features?.meanInterKeyMs === undefined ? "—" : `${features.meanInterKeyMs.toFixed(0)}ms`}
           </Typography>
         </Box>
       </Box>
@@ -229,7 +241,7 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
                 Status: <span style={{ color: fatigueStatus.color }}>{fatigueStatus.text}</span>
               </Typography>
               <Typography variant="caption" sx={{ color: "var(--text-secondary)", maxWidth: "180px", display: "block" }}>
-                Derived from this session&apos;s observed accuracy, error ratio, and key count. Dwell time, focus duration, and behavioral identity models are not collected by this prototype.
+                Derived from this session&apos;s observed correction rate, pauses, duration, and inter-key timing. This is an explainable behavioral signal, not a medical diagnosis or security decision.
               </Typography>
             </Box>
           </Box>
@@ -246,13 +258,13 @@ export default function AnalyticsPanel({ stats }: AnalyticsPanelProps) {
 
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
             <Typography variant="caption" sx={{ color: "var(--text-secondary)" }}>
-              No 24-hour focus history is available in this browser-only session.
+No 24-hour history is available. Metrics below are calculated from the active observed session.
             </Typography>
 
             {/* Grid block representation */}
             <Box sx={{ display: "flex", gap: "2px", width: "100%", height: "70px", mt: 1 }}>
               {hourlyActivity.map((val, idx) => {
-                // Color shades depending on hourly typing intensity
+                // Empty-state branch is retained for future session-history data.
                 let bg = "var(--bg-primary)";
                 if (val > 80) bg = "var(--accent-olive-dark)";
                 else if (val > 50) bg = "var(--accent-olive-medium)";
