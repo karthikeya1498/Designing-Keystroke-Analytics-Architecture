@@ -49,7 +49,13 @@ function hasIngestAccess(request: Request): boolean {
   if (configuredToken && request.headers.get("authorization") === `Bearer ${configuredToken}`) return true;
 
   const sessionCookie = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
-  const sessionValue = sessionCookie?.slice(`${SESSION_COOKIE}=`.length);
+  const encodedSessionValue = sessionCookie?.slice(`${SESSION_COOKIE}=`.length);
+  let sessionValue: string | undefined;
+  try {
+    sessionValue = encodedSessionValue ? decodeURIComponent(encodedSessionValue) : undefined;
+  } catch {
+    sessionValue = undefined;
+  }
   if (isValidSession(sessionValue)) return true;
 
   return process.env.NODE_ENV !== "production" && process.env.AEGISKEY_ALLOW_DEMO_INGEST === "true";

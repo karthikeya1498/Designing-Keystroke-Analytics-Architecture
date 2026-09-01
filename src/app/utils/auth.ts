@@ -20,7 +20,8 @@ export function createSession(username: string): string {
 
 export function isValidSession(value: string | undefined): boolean {
   if (!value) return false;
-  const [username, expiry, providedSignature] = value.split(":");
+  const [username, signedExpiry] = value.split(":");
+  const [expiry, providedSignature] = signedExpiry?.split(".") ?? [];
   if (!username || !expiry || !providedSignature || Number(expiry) < Math.floor(Date.now() / 1000)) return false;
   const payload = `${username}:${expiry}`;
   const expected = signature(payload);
