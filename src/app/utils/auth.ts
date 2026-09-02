@@ -30,6 +30,21 @@ export function isValidSession(value: string | undefined): boolean {
   return provided.length === expectedBuffer.length && timingSafeEqual(provided, expectedBuffer);
 }
 
+export function getSessionUsername(value: string | undefined): string | null {
+  if (!value || !isValidSession(value)) return null;
+  return value.split(":", 1)[0] ?? null;
+}
+
+export function getSessionUsernameFromCookieHeader(header: string | null): string | null {
+  const rawValue = header?.match(new RegExp(`${SESSION_COOKIE}=([^;]+)`))?.[1];
+  if (!rawValue) return null;
+  try {
+    return getSessionUsername(decodeURIComponent(rawValue));
+  } catch {
+    return null;
+  }
+}
+
 export function configuredCredentialsMatch(username: string, password: string): boolean {
   const configuredUsername = process.env.AEGISKEY_DASHBOARD_USER;
   const configuredPassword = process.env.AEGISKEY_DASHBOARD_PASSWORD;

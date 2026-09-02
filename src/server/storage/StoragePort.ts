@@ -1,4 +1,5 @@
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "@/domain/events/models";
+import type { AnomalyAssessment, BehavioralBaseline } from "@/domain/security/models";
 
 export interface EventRepository {
   appendEvents(events: readonly SanitizedKeystrokeEvent[]): Promise<void>;
@@ -15,8 +16,20 @@ export interface AuditRepository {
   listRecent(limit: number): Promise<readonly AuditEvent[]>;
 }
 
+export interface BaselineRepository {
+  save(baseline: BehavioralBaseline): Promise<void>;
+  get(userId: string): Promise<BehavioralBaseline | null>;
+}
+
+export interface AnomalyRepository {
+  append(assessment: AnomalyAssessment): Promise<void>;
+  listRecent(userId: string, limit: number): Promise<readonly AnomalyAssessment[]>;
+}
+
 export interface StoragePort {
   events: EventRepository;
   analytics: AnalyticsRepository;
   audit: AuditRepository;
+  baselines: BaselineRepository;
+  anomalies: AnomalyRepository;
 }

@@ -51,7 +51,12 @@ export function buildBaseline(userId: string, sessions: readonly BehavioralFeatu
 
 function safeZScore(observed: number, baseline: BaselineMetric): number {
   if (baseline.sampleCount === 0) return 0;
-  if (baseline.standardDeviation < Number.EPSILON) return Math.abs(observed - baseline.mean) < Number.EPSILON ? 0 : 3;
+  if (baseline.standardDeviation < Number.EPSILON) {
+    // A perfectly constant small sample cannot provide a useful standard deviation.
+    // Use a conservative relative tolerance rather than treating every tiny drift as anomalous.
+    const tolerance = Math.max(Math.abs(baseline.mean) * 0.05, 1);
+    return Math.abs(observed - baseline.mean) <= tolerance ? 0 : 3;
+  }
   return (observed - baseline.mean) / baseline.standardDeviation;
 }
 

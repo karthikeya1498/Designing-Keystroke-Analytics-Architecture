@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { ShieldAlert, ShieldCheck, Key, UserCheck, AlertOctagon, Info, FileText } from "lucide-react";
 import type { ContinuousAuthenticationSnapshot } from "../../domain/security/models";
@@ -19,6 +19,7 @@ interface SecurityCenterProps {
 }
 
 export default function SecurityCenter({ onStatusChange, authentication }: SecurityCenterProps) {
+  const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "offline">("connecting");
   const [alerts, setAlerts] = useState<Alert[]>([
     {
       id: "1",
@@ -35,6 +36,24 @@ export default function SecurityCenter({ onStatusChange, authentication }: Secur
       severity: "info",
     },
   ]);
+
+  useEffect(() => {
+    const stream = new EventSource("/api/security/stream");
+    const handleAnomaly = (event: MessageEvent<string>) => {
+      try {
+        const assessment = JSON.parse(event.data) as { riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "BASELINE_BUILDING"; explanation: string; riskScore: number | null };
+        const severity: Alert["severity"] = assessment.riskLevel === "CRITICAL" ? "critical" : assessment.riskLevel === "HIGH" ? "warning" : "info";
+        setAlerts((previous) => [{ id: `sse-${Date.now()}`, time: new Date().toISOString().slice(11, 19), title: `LIVE: ${assessment.riskLevel} behavioral assessment`, desc: `${assessment.explanation}${assessment.riskScore === null ? " No decision is made during baseline enrollment." : ` Risk score ${assessment.riskScore.toFixed(2)}.`}`, severity }, ...previous].slice(0, 20));
+      } catch {
+        setStreamStatus("offline");
+      }
+    };
+    stream.addEventListener("open", () => setStreamStatus("live"));
+    stream.addEventListener("anomaly", handleAnomaly);
+    stream.addEventListener("baseline", () => setStreamStatus("live"));
+    stream.onerror = () => setStreamStatus("offline");
+    return () => stream.close();
+  }, []);
 
   const triggerThreat = (type: "credential" | "insider" | "biometric") => {
     const timeStr = new Date().toISOString().split("T")[1].slice(0, 8);
@@ -124,9 +143,12 @@ export default function SecurityCenter({ onStatusChange, authentication }: Secur
 
       {/* Interactive Threat Simulator Control Board */}
       <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)", mb: 1.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)", mb: 1.5 }}>
           Synthetic threat scenarios (not an OS agent or AI detector)
-        </Typography>
+          </Typography>
+          <Typography variant="caption" sx={{ display: "block", color: "var(--text-secondary)", mb: 1 }}>
+            Security stream: {streamStatus}
+          </Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           <button className="sketch-btn" onClick={() => triggerThreat("credential")}>
             <Key size={14} /> Leak Credential
