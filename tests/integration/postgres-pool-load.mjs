@@ -12,7 +12,7 @@ const percentile = (values, p) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)];
 };
-const worker = async (index) => {
+const worker = async () => {
   const started = process.hrtime.bigint();
   try {
     await pool.query('SELECT count(*)::int AS table_count FROM information_schema.tables WHERE table_schema = $1', ['public']);
@@ -25,7 +25,7 @@ const worker = async (index) => {
 try {
   const started = process.hrtime.bigint();
   for (let offset = 0; offset < queries; offset += concurrency) {
-    await Promise.all(Array.from({ length: Math.min(concurrency, queries - offset) }, (_, index) => worker(offset + index)));
+    await Promise.all(Array.from({ length: Math.min(concurrency, queries - offset) }, () => worker()));
   }
   const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
   const active = await pool.query("SELECT count(*)::int AS active FROM pg_stat_activity WHERE application_name = 'aegiskey-pool-benchmark'");

@@ -1,4 +1,54 @@
 services:
+  app-1:
+    build:
+      context: .
+    container_name: aegiskey-app-1
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      AEGISKEY_SESSION_SECRET: ${AEGISKEY_SESSION_SECRET:?Set AEGISKEY_SESSION_SECRET in .env.production}
+      AEGISKEY_DASHBOARD_USER: ${AEGISKEY_DASHBOARD_USER:?Set AEGISKEY_DASHBOARD_USER in .env.production}
+      AEGISKEY_DASHBOARD_PASSWORD: ${AEGISKEY_DASHBOARD_PASSWORD:?Set AEGISKEY_DASHBOARD_PASSWORD in .env.production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aegiskey}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/${POSTGRES_DB:-aegiskey}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${APP_1_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  app-2:
+    build:
+      context: .
+    container_name: aegiskey-app-2
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      AEGISKEY_SESSION_SECRET: ${AEGISKEY_SESSION_SECRET:?Set AEGISKEY_SESSION_SECRET in .env.production}
+      AEGISKEY_DASHBOARD_USER: ${AEGISKEY_DASHBOARD_USER:?Set AEGISKEY_DASHBOARD_USER in .env.production}
+      AEGISKEY_DASHBOARD_PASSWORD: ${AEGISKEY_DASHBOARD_PASSWORD:?Set AEGISKEY_DASHBOARD_PASSWORD in .env.production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aegiskey}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/${POSTGRES_DB:-aegiskey}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${APP_2_PORT:-3001}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: aegiskey-redis
@@ -41,7 +91,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - aegiskey-postgres-data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./database/migrations/001_initial_privacy_schema.sql:/docker-entrypoint-initdb.d/001-initial-privacy-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aegiskey} -d $${POSTGRES_DB:-aegiskey}"]
       interval: 5s
