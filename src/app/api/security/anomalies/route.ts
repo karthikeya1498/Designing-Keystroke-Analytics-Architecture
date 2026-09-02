@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { publishSecurityStream } from "../../../../server/realtime/EventBus";
+import { publishSecurityEvent } from "../../../../server/realtime/RuntimeSecurityBus";
 import { getSessionUsernameFromCookieHeader } from "../../../utils/auth";
 import { fileStorage } from "../../../../server/storage/FileStorage";
 import type { AnomalyAssessment } from "../../../../domain/security/models";
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!parsed.success || parsed.data.userId !== userId) return NextResponse.json({ error: "Invalid anomaly assessment" }, { status: 422 });
   const assessment = parsed.data as AnomalyAssessment;
   await fileStorage.anomalies.append(assessment);
-  publishSecurityStream(userId, { type: "anomaly", payload: assessment });
+  await publishSecurityEvent(userId, { type: "anomaly", payload: assessment });
   return NextResponse.json({ assessment }, { status: 201 });
 }
 
