@@ -13,17 +13,22 @@ function signature(payload: string): string {
   return createHmac("sha256", secret()).update(payload).digest("base64url");
 }
 
-export function createSession(username: string): string {
-  const payload = `${username}:${Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS}`;
+export function createSession(accountId: string, email: string): string {
+  const payload = `${accountId}:${encodeURIComponent(email)}:${Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS}`;
   return `${payload}.${signature(payload)}`;
 }
 
 export function isValidSession(value: string | undefined): boolean {
   if (!value) return false;
-  const [username, signedExpiry] = value.split(":");
+  const [accountId, encodedEmail, signedExpiry] = value.split(":");
   const [expiry, providedSignature] = signedExpiry?.split(".") ?? [];
-  if (!username || !expiry || !providedSignature || Number(expiry) < Math.floor(Date.now() / 1000)) return false;
-  const payload = `${username}:${expiry}`;
+  if (!accountId || !encodedEmail || !expiry || !providedSignature || !/^[0-9a-f-]{36}$/i.test(accountId) || Number(expiry) < Math.floor(Date.now() / 1000)) return false;
+  try {
+    decodeURIComponent(encodedEmail);
+  } catch {
+    return false;
+  }
+  const payload = `${accountId}:${encodedEmail}:${expiry}`;
   const expected = signature(payload);
   const provided = Buffer.from(providedSignature);
   const expectedBuffer = Buffer.from(expected);
@@ -31,6 +36,12 @@ export function isValidSession(value: string | undefined): boolean {
 }
 
 export function getSessionUsername(value: string | undefined): string | null {
+  if (!value || !isValidSession(value)) return null;
+  const [, encodedEmail] = value.split(":");
+  return encodedEmail ? decodeURIComponent(encodedEmail) : null;
+}
+
+export function getSessionAccountId(value: string | undefined): string | null {
   if (!value || !isValidSession(value)) return null;
   return value.split(":", 1)[0] ?? null;
 }
@@ -43,13 +54,6 @@ export function getSessionUsernameFromCookieHeader(header: string | null): strin
   } catch {
     return null;
   }
-}
-
-export function configuredCredentialsMatch(username: string, password: string): boolean {
-  const configuredUsername = process.env.AEGISKEY_DASHBOARD_USER;
-  const configuredPassword = process.env.AEGISKEY_DASHBOARD_PASSWORD;
-  if (!configuredUsername || !configuredPassword) return false;
-  return username === configuredUsername && password === configuredPassword;
 }
 
 export const sessionMaxAge = SESSION_TTL_SECONDS;

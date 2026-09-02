@@ -97,16 +97,16 @@ Request body:
 
 ```json
 {
-  "username": "operator",
-  "password": "configured-secret"
+  "email": "operator@example.com",
+  "password": "a-strong-password"
 }
 ```
 
-A successful response is `200 OK` with an authentication success body and an HttpOnly cookie. Invalid credentials return `401 Unauthorized`. The session secret must be at least 32 characters. Demo credentials are available only when explicit non-production demo mode is enabled.
+A successful response is `200 OK` with an authentication success body and an account-bound HttpOnly cookie. Invalid credentials return `401 Unauthorized`. The session secret must be at least 32 characters. Accounts must first be created through `POST /api/auth/register`; demo credentials are not supported.
 
 ### `POST /api/logs`
 
-Accepts a bounded batch of encrypted event envelopes. Authentication is accepted through a configured bearer token, a valid dashboard session, or explicit development-only demo mode.
+Accepts a bounded batch of encrypted event envelopes. Authentication is accepted through a configured bearer token or a valid registered-account dashboard session. Demo-mode ingestion is not supported.
 
 The body is an object containing an `events` array. Each event is schema-validated and the request is limited to 64 KiB. The API applies a rate limit and writes append-only development records. Successful ingestion returns `202 Accepted` with the accepted count. Invalid JSON returns `400`, invalid schema returns `422`, oversized payloads return `413`, authentication failures return `401`, and rate limiting returns `429`.
 
@@ -213,7 +213,7 @@ Important variables include:
 | `AEGISKEY_DASHBOARD_USER` | Dashboard identity | Required for configured login |
 | `AEGISKEY_DASHBOARD_PASSWORD` | Dashboard credential | Required for configured login |
 | `AEGISKEY_INGEST_TOKEN` | Gateway/agent bearer token | Required for bearer ingestion |
-| `AEGISKEY_ALLOW_DEMO_INGEST` | Explicit local demo mode | Never enable in production |
+| `AEGISKEY_ALLOW_DEMO_INGEST` | Removed legacy setting | No longer supported |
 | `DATABASE_URL` | PostgreSQL connection | Required when PostgreSQL adapter is enabled |
 | `REDIS_URL` | Multi-instance SSE transport | Required for cross-process streaming |
 | `ML_PORT` | Python service port | Optional; defaults to 8000 |

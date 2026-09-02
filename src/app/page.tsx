@@ -67,8 +67,10 @@ export default function Home() {
   // Authentication & Transition States
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
   const changeDashboardBySwipe = useCallback((direction: "next" | "previous") => {
@@ -93,6 +95,33 @@ export default function Home() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setLoginError("* Error: Passwords do not match");
+      return;
+    }
+    setLoginError("");
+    setIsTransitioning(true);
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: username, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Registration failed");
+      setAuthMode("login");
+      setPassword("");
+      setConfirmPassword("");
+      setLoginError("Account created. Sign in to continue.");
+    } catch (error) {
+      setLoginError(`* Error: ${error instanceof Error ? error.message : "Registration failed"}`);
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
@@ -106,7 +135,7 @@ export default function Home() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email: username, password }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Authentication failed");
@@ -284,21 +313,21 @@ export default function Home() {
               [AegisKey_Shield]
             </span>
             <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block", mt: 0.5, fontStyle: "italic" }}>
-              Verify identity to open security dashboard.
+              {authMode === "register" ? "Create an account to open the security dashboard." : "Sign in to open the security dashboard."}
             </Typography>
           </Box>
 
-          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <form onSubmit={authMode === "register" ? handleRegister : handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
               <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)" }}>
-                Username
+                Email address
               </Typography>
               <input
-                type="text"
+                type="email"
                 className="typing-paper"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. demo-operator"
+                placeholder="you@example.com"
                 style={{ minHeight: "45px", padding: "10px", lineHeight: "24px" }}
                 required
               />
@@ -319,8 +348,25 @@ export default function Home() {
               />
             </Box>
 
+            {authMode === "register" && (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)" }}>
+                  Confirm password
+                </Typography>
+                <input
+                  type="password"
+                  className="typing-paper"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat your password"
+                  style={{ minHeight: "45px", padding: "10px", lineHeight: "24px" }}
+                  required
+                />
+              </Box>
+            )}
+
             {loginError && (
-              <Typography variant="caption" sx={{ color: "var(--alert-critical)", fontWeight: 600 }}>
+              <Typography variant="caption" sx={{ color: loginError.startsWith("Account created") ? "var(--accent-olive-dark)" : "var(--alert-critical)", fontWeight: 600 }}>
                 {loginError}
               </Typography>
             )}
@@ -330,13 +376,21 @@ export default function Home() {
               className="sketch-btn" 
               style={{ width: "100%", justifyContent: "center", minHeight: "45px", marginTop: "8px" }}
             >
-              [Verify_Identity]
+              {authMode === "register" ? "[Create_Account]" : "[Sign_In]"}
             </button>
           </form>
           
           <Typography variant="caption" sx={{ color: "var(--text-secondary)", textAlign: "center", opacity: 0.8 }}>
-            Configure dashboard credentials in `.env.local` before signing in. Local demo mode accepts `demo` / `demo`.
+            Passwords require 12+ characters with uppercase, lowercase, and a number. Credentials are stored as scrypt hashes.
           </Typography>
+          <button
+            type="button"
+            className="sketch-btn"
+            onClick={() => { setAuthMode(authMode === "register" ? "login" : "register"); setLoginError(""); setPassword(""); setConfirmPassword(""); }}
+            style={{ width: "100%", justifyContent: "center", minHeight: "40px", opacity: 0.85 }}
+          >
+            {authMode === "register" ? "Already registered? [Sign_In]" : "Need an account? [Register]"}
+          </button>
         </Box>
       </Box>
     );

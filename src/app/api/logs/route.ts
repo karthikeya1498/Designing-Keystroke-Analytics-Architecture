@@ -58,7 +58,7 @@ function hasIngestAccess(request: Request): boolean {
   }
   if (isValidSession(sessionValue)) return true;
 
-  return process.env.NODE_ENV !== "production" && process.env.AEGISKEY_ALLOW_DEMO_INGEST === "true";
+  return false;
 }
 
 function jsonError(message: string, status: number, headers?: HeadersInit) {

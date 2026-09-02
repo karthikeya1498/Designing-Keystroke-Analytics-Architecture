@@ -26,7 +26,7 @@ The application dependency upgrade was intentionally limited to the audit-recomm
 
 ## Security controls observed in application code
 
-The session signer rejects missing or short signing secrets, uses HMAC-SHA256, and compares signatures with a timing-safe comparison after equal-length checking. Login input is strictly validated and production demo credentials are disabled. Ingestion and log access require a valid session or a configured bearer token; the demo bypass is gated to non-production environments and an explicit opt-in flag. Stored and returned telemetry excludes raw character values, and the log GET route returns only sanitized metadata and ciphertext size.
+The session signer rejects missing or short signing secrets, uses HMAC-SHA256, and compares signatures with a timing-safe comparison after equal-length checking. Login input is strictly validated and demo credentials are not supported. Ingestion and log access require a valid registered-account session or a configured bearer token. Stored and returned telemetry excludes raw character values, and the log GET route returns only sanitized metadata and ciphertext size.
 
 ## Residual risks and recommendations
 
