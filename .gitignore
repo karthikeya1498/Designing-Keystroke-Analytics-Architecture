@@ -42,3 +42,10 @@ next-env.d.ts
 
 # local keystroke database
 keystroke_logs.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
