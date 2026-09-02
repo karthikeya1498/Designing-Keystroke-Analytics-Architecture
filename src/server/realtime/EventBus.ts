@@ -1,5 +1,5 @@
 export type SecurityStreamEvent = {
-  type: "anomaly" | "baseline" | "heartbeat";
+  type: "analytics" | "anomaly" | "baseline" | "heartbeat";
   payload: unknown;
 };
 

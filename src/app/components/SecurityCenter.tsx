@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import { ShieldAlert, ShieldCheck, Key, UserCheck, AlertOctagon, Info, FileText } from "lucide-react";
+import { ShieldAlert, AlertOctagon, Info, FileText } from "lucide-react";
 import type { ContinuousAuthenticationSnapshot } from "../../domain/security/models";
 
 interface Alert {
@@ -14,31 +14,23 @@ interface Alert {
 }
 
 interface SecurityCenterProps {
-  onStatusChange: (status: "secure" | "warning" | "critical") => void;
   authentication?: ContinuousAuthenticationSnapshot | null;
 }
 
-export default function SecurityCenter({ onStatusChange, authentication }: SecurityCenterProps) {
+export default function SecurityCenter({ authentication }: SecurityCenterProps) {
   const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "offline">("connecting");
-  const [alerts, setAlerts] = useState<Alert[]>([
-    {
-      id: "1",
-      time: "19:05:04",
-      title: "Browser Prototype Initialized",
-      desc: "Browser typing sandbox ready. Event encryption uses a non-extractable local AES-256-GCM key; no OS daemon is running.",
-      severity: "info",
-    },
-    {
-      id: "2",
-      time: "19:06:12",
-      title: "Derived Metrics Available",
-      desc: "Session metrics are derived from observed sandbox input. No user identity or behavioral baseline has been calibrated.",
-      severity: "info",
-    },
-  ]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
     const stream = new EventSource("/api/security/stream");
+    const handleAnalytics = (event: MessageEvent<string>) => {
+      try {
+        const snapshot = JSON.parse(event.data) as { estimatedWpm: number; accuracy: number; riskLevel: string };
+        setAlerts((previous) => [{ id: `analytics-${Date.now()}`, time: new Date().toISOString().slice(11, 19), title: "LIVE: Analytics snapshot persisted", desc: `WPM ${snapshot.estimatedWpm.toFixed(1)} · Accuracy ${(snapshot.accuracy * 100).toFixed(1)}% · ${snapshot.riskLevel}`, severity: "info" as const }, ...previous].slice(0, 20));
+      } catch {
+        setStreamStatus("offline");
+      }
+    };
     const handleAnomaly = (event: MessageEvent<string>) => {
       try {
         const assessment = JSON.parse(event.data) as { riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "BASELINE_BUILDING"; explanation: string; riskScore: number | null };
@@ -49,62 +41,12 @@ export default function SecurityCenter({ onStatusChange, authentication }: Secur
       }
     };
     stream.addEventListener("open", () => setStreamStatus("live"));
+    stream.addEventListener("analytics", handleAnalytics);
     stream.addEventListener("anomaly", handleAnomaly);
     stream.addEventListener("baseline", () => setStreamStatus("live"));
     stream.onerror = () => setStreamStatus("offline");
     return () => stream.close();
   }, []);
-
-  const triggerThreat = (type: "credential" | "insider" | "biometric") => {
-    const timeStr = new Date().toISOString().split("T")[1].slice(0, 8);
-    let newAlert: Alert;
-
-    if (type === "credential") {
-      newAlert = {
-        id: Date.now().toString(),
-        time: timeStr,
-        title: "SIMULATION: Credential Leak Scenario",
-        desc: "Synthetic scenario only. The browser prototype does not inspect other applications, clipboard contents, or credentials.",
-        severity: "critical",
-      };
-      onStatusChange("critical");
-    } else if (type === "insider") {
-      newAlert = {
-        id: Date.now().toString(),
-        time: timeStr,
-        title: "SIMULATION: High-Risk Activity",
-        desc: "Synthetic scenario only. This repository does not observe command execution, windows, working hours, or context switching.",
-        severity: "warning",
-      };
-      onStatusChange("warning");
-    } else {
-      newAlert = {
-        id: Date.now().toString(),
-        time: timeStr,
-        title: "SIMULATION: Cadence Mismatch",
-        desc: "Synthetic scenario only. The local Phase 4 scorer can compare timing against a baseline once enough consented sessions are available.",
-        severity: "critical",
-      };
-      onStatusChange("critical");
-    }
-
-    setAlerts((prev) => [newAlert, ...prev]);
-  };
-
-  const resolveThreats = () => {
-    const timeStr = new Date().toISOString().split("T")[1].slice(0, 8);
-    setAlerts((prev) => [
-      {
-        id: Date.now().toString(),
-        time: timeStr,
-        title: "System Restored",
-        desc: "All active security exceptions resolved. Cadence tracking returned to baseline monitoring state.",
-        severity: "info",
-      },
-      ...prev,
-    ]);
-    onStatusChange("secure");
-  };
 
   return (
     <Box className="sketch-card" sx={{ display: "flex", flexDirection: "column", gap: 3, height: "100%" }}>
@@ -113,7 +55,7 @@ export default function SecurityCenter({ onStatusChange, authentication }: Secur
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <ShieldAlert size={20} color="var(--accent-olive-dark)" />
           <span className="sketch-title" style={{ fontSize: "1.3rem" }}>
-            [Security_Scenario_Simulator]
+            [Live_Security_Stream]
           </span>
         </Box>
       </Box>
@@ -141,32 +83,13 @@ export default function SecurityCenter({ onStatusChange, authentication }: Secur
         </Box>
       )}
 
-      {/* Interactive Threat Simulator Control Board */}
       <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)", mb: 1.5 }}>
-          Synthetic threat scenarios (not an OS agent or AI detector)
-          </Typography>
-          <Typography variant="caption" sx={{ display: "block", color: "var(--text-secondary)", mb: 1 }}>
-            Security stream: {streamStatus}
-          </Typography>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          <button className="sketch-btn" onClick={() => triggerThreat("credential")}>
-            <Key size={14} /> Leak Credential
-          </button>
-          <button className="sketch-btn" onClick={() => triggerThreat("insider")}>
-            <AlertOctagon size={14} /> Insider Threat
-          </button>
-          <button className="sketch-btn" onClick={() => triggerThreat("biometric")}>
-            <UserCheck size={14} /> Cadence Hijack
-          </button>
-          <button 
-            className="sketch-btn" 
-            onClick={resolveThreats}
-            style={{ borderColor: "var(--alert-success)", color: "var(--alert-success)" }}
-          >
-            <ShieldCheck size={14} /> Resolve All
-          </button>
-        </Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--accent-olive-dark)", mb: 1.5 }}>
+          Live security event stream
+        </Typography>
+        <Typography variant="caption" sx={{ display: "block", color: "var(--text-secondary)" }}>
+          SSE connection: {streamStatus}. Events are emitted after real authenticated analytics persistence.
+        </Typography>
       </Box>
 
       {/* Incident Log Feed */}

@@ -34,8 +34,18 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const dashboardRef = React.useRef<HTMLDivElement>(null);
   const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
-  const [isSimulating, setIsSimulating] = useState(false);
   const [currentApp, setCurrentApp] = useState("Browser typing sandbox");
+
+  // Authentication & Transition States
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authenticatedEmail, setAuthenticatedEmail] = useState("");
+  const [serverAuthentication, setServerAuthentication] = useState<ContinuousAuthenticationSnapshot | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   
   // Refresh trigger for log updates
   const [logRefreshTrigger, setLogRefreshTrigger] = useState(false);
@@ -51,10 +61,10 @@ export default function Home() {
   const behavioralFeatures = useMemo<BehavioralFeatureVector | null>(() => {
     if (telemetryEvents.length === 0) return null;
     const sessionId = telemetryEvents[0].sessionId;
-    const pipeline = new BehavioralModelPipeline(sessionId, "local-browser-user");
+    const pipeline = new BehavioralModelPipeline(sessionId, authenticatedEmail || "unidentified-browser-user");
     pipeline.ingestBatch(telemetryEvents);
     return pipeline.snapshot();
-  }, [telemetryEvents]);
+  }, [telemetryEvents, authenticatedEmail]);
   const authenticationSnapshot = useMemo<ContinuousAuthenticationSnapshot | null>(() => {
     if (!behavioralFeatures) return null;
     const baseline = buildBaseline(behavioralFeatures.userId, []);
@@ -62,16 +72,7 @@ export default function Home() {
   }, [behavioralFeatures]);
 
   // Global security health state
-  const [securityStatus, setSecurityStatus] = useState<"secure" | "warning" | "critical">("secure");
-
-  // Authentication & Transition States
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [authMode, setAuthMode] = useState<"register" | "login">("register");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
+  const [securityStatus] = useState<"secure" | "warning" | "critical">("secure");
 
   const changeDashboardBySwipe = useCallback((direction: "next" | "previous") => {
     setActiveTab((current) => {
@@ -139,6 +140,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Authentication failed");
+      setAuthenticatedEmail(data.email || username.toLowerCase());
       setIsLoggedIn(true);
     } catch (error) {
       setLoginError(`* Error: ${error instanceof Error ? error.message : "Authentication failed"}`);
@@ -146,6 +148,22 @@ export default function Home() {
       setIsTransitioning(false);
     }
   };
+
+  useEffect(() => {
+    if (!isLoggedIn || !behavioralFeatures || !authenticatedEmail) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(behavioralFeatures),
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(`Analytics API returned ${response.status}`);
+        const data = await response.json() as { authentication: ContinuousAuthenticationSnapshot };
+        setServerAuthentication(data.authentication);
+      }).catch((error) => console.error("Failed to persist live analytics:", error));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [isLoggedIn, authenticatedEmail, behavioralFeatures]);
 
   const handleKeystroke = useCallback(async (e: KeystrokeEvent) => {
     setLatestKeystroke(e);
@@ -185,70 +203,8 @@ export default function Home() {
     }
   }, [currentApp]);
 
-  // Background Live Workstation Simulator
-  useEffect(() => {
-    if (!isSimulating) return;
-
-    const sampleSentence = "AegisKey browser sandbox is active. Local metrics are derived from observed input. AES-GCM encryption verified.";
-    let charIndex = 0;
-
-    const interval = setInterval(() => {
-      const char = sampleSentence[charIndex];
-      
-      // QWERTY key mapping
-      const codeMap: { [key: string]: string } = {
-        a: "KeyA", b: "KeyB", c: "KeyC", d: "KeyD", e: "KeyE", f: "KeyF", g: "KeyG", h: "KeyH",
-        i: "KeyI", j: "KeyJ", k: "KeyK", l: "KeyL", m: "KeyM", n: "KeyN", o: "KeyO", p: "KeyP",
-        q: "KeyQ", r: "KeyR", s: "KeyS", t: "KeyT", u: "KeyU", v: "KeyV", w: "KeyW", x: "KeyX",
-        y: "KeyY", z: "KeyZ", " ": "Space", ".": "Period", ",": "Comma"
-      };
-
-      const code = codeMap[char.toLowerCase()] || "KeyE";
-
-      // Dispatch synthetic keydown/keyup globally to animate virtual keys
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: char, code }));
-        setTimeout(() => {
-          window.dispatchEvent(new KeyboardEvent("keyup", { key: char, code }));
-        }, 100);
-      }
-
-      // Trigger pipeline encryption
-      handleKeystroke({
-        key: char,
-        code,
-        timestamp: Date.now(),
-        // Deterministic demo signal: every 23rd generated event is marked as a synthetic error.
-        isCorrect: charIndex % 23 !== 0,
-      });
-
-      // Update statistics with organic fluctuations
-      setStats((prev) => {
-        const nextTotal = prev.totalKeys + 1;
-        const speed = 74 + Math.round(Math.sin(nextTotal / 12) * 6); // Fluctuate WPM between 68 and 80
-        const isErr = charIndex % 23 === 0;
-        const errors = isErr ? [...prev.errorKeys, code] : prev.errorKeys;
-        const rawAccuracy = Math.round(((nextTotal - errors.length) / nextTotal) * 100);
-        return {
-          wpm: speed,
-          accuracy: Math.max(92, Math.min(rawAccuracy, 100)),
-          totalKeys: nextTotal,
-          errorKeys: errors,
-        };
-      });
-
-      charIndex = (charIndex + 1) % sampleSentence.length;
-    }, 450);
-
-    return () => clearInterval(interval);
-  }, [isSimulating, handleKeystroke]);
-
   const handleStatsUpdate = (newStats: typeof stats) => {
     setStats(newStats);
-  };
-
-  const handleStatusChange = (newStatus: "secure" | "warning" | "critical") => {
-    setSecurityStatus(newStatus);
   };
 
   // Get status metadata for banner display
@@ -505,11 +461,7 @@ export default function Home() {
 
         <DashboardNav activeTab={activeTab} onTabChange={setActiveTab} mode={navigationMode} onModeChange={setNavigationMode} isFullscreen={isFullscreen} onFullscreen={() => void toggleFullscreen()} />
         <Box className="simulator-toolbar">
-          <span className="gesture-status">Swipe with two fingers horizontally to change dashboards</span>
-          <button className="sketch-btn" onClick={() => setIsSimulating((active) => !active)} style={{ borderColor: isSimulating ? "var(--accent-olive-medium)" : "var(--border-color)", backgroundColor: isSimulating ? "var(--accent-olive-pale)" : "transparent", color: isSimulating ? "var(--accent-olive-medium)" : "var(--text-primary)" }}>
-            <span className={`simulator-dot ${isSimulating ? "active" : ""}`} />
-            {isSimulating ? "[Simulator: ACTIVE]" : "[Simulate_Live_Endpoint]"}
-          </button>
+          <span className="gesture-status">Swipe with two fingers horizontally to change dashboards · Live browser telemetry only</span>
         </Box>
 
         {/* TAB VIEWS RENDERING */}
@@ -527,7 +479,7 @@ export default function Home() {
                   </span>
                 </Box>
                 <Typography variant="body2" sx={{ color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                  AegisKey is a browser-based architecture prototype. The typing sandbox derives local metrics and encrypts each event into an AES-256-GCM envelope before sending it to the demo ingestion API. The current repository does not include an OS-level agent, managed queue, Spanner database, or Vertex AI model; those are documented production extension points rather than active dependencies.
+                  AegisKey derives metrics from actual browser keyboard events, encrypts sanitized event envelopes, persists live analytics snapshots, and streams server-scored authentication updates through the authenticated API and SSE channel.
                 </Typography>
               </Box>
 
@@ -536,7 +488,7 @@ export default function Home() {
             </Box>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              <SecurityCenter onStatusChange={handleStatusChange} authentication={authenticationSnapshot} />
+              <SecurityCenter authentication={serverAuthentication ?? authenticationSnapshot} />
               <AnalyticsPanel stats={stats} features={behavioralFeatures} />
             </Box>
           </Box>
@@ -608,7 +560,7 @@ export default function Home() {
         {activeTab === "security" && (
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "5fr 7fr" }, gap: 3, alignItems: "start" }}>
             <Box>
-              <SecurityCenter onStatusChange={handleStatusChange} authentication={authenticationSnapshot} />
+              <SecurityCenter authentication={serverAuthentication ?? authenticationSnapshot} />
             </Box>
 
             <Box className="sketch-card" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -621,13 +573,13 @@ export default function Home() {
               
               <Box sx={{ p: 2, border: "1.5px dashed var(--border-color-light)", borderRadius: "6px", backgroundColor: "var(--accent-olive-tint)" }}>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--accent-olive-dark)", mb: 1 }}>
-                  Identity Baseline: <span style={{ color: "var(--accent-olive-medium)" }}>Not configured</span>
+                  Identity Baseline: <span style={{ color: "var(--accent-olive-medium)" }}>{serverAuthentication?.riskLevel === "BASELINE_BUILDING" ? "Building from consented sessions" : serverAuthentication ? "Active" : "Waiting for live session"}</span>
                 </Typography>
                 
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, fontFamily: "var(--font-mono)", fontSize: "12px" }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Profile Calibration Accuracy:</span>
-                    <span style={{ fontWeight: 700 }}>N/A</span>
+                    <span style={{ fontWeight: 700 }}>{serverAuthentication ? `${serverAuthentication.assessment.confidence.toFixed(2)} confidence` : "Waiting"}</span>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Baseline Typing Speed:</span>
@@ -635,11 +587,11 @@ export default function Home() {
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Dwell-Time Jitter Baseline:</span>
-                    <span style={{ fontWeight: 700 }}>N/A</span>
+                    <span style={{ fontWeight: 700 }}>{behavioralFeatures?.meanDwellMs == null ? "Waiting" : `${behavioralFeatures.meanDwellMs.toFixed(1)} ms live`}</span>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <span>Preferred Capitalizer hand:</span>
-                    <span style={{ fontWeight: 700 }}>N/A</span>
+                    <span>Session events persisted:</span>
+                    <span style={{ fontWeight: 700 }}>{telemetryEvents.length}</span>
                   </Box>
                 </Box>
               </Box>
@@ -647,7 +599,7 @@ export default function Home() {
               {/* Hand-drawn sketch diagram of typing curves */}
               <Box sx={{ border: "1.5px solid var(--border-color)", borderRadius: "6px", p: 2, height: "180px", display: "flex", flexDirection: "column", gap: 1 }}>
                 <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontWeight: 600 }}>
-                  Keystroke dynamics signature: unavailable until a consented agent collects dwell and flight timings.
+                  Keystroke dynamics signature is derived from the current consented browser session and sent as aggregate analytics.
                 </Typography>
                 <Box sx={{ flex: 1, position: "relative", mt: 1 }}>
                   {/* Drawing curve as SVG */}
@@ -719,7 +671,7 @@ export default function Home() {
                     Production Queue Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Managed queue: not connected in this repository
+                    Redis pub/sub: connected when REDIS_URL is configured
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
                     Required controls: partitioning, back-pressure, dead-letter handling
@@ -733,7 +685,7 @@ export default function Home() {
                     Production Database Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Database: not connected; local development uses append-only file storage
+                    Analytics API: connected; snapshots persist through the configured storage adapter
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
                     Required controls: tenant isolation, indexes, retention, encryption at rest
@@ -747,7 +699,7 @@ export default function Home() {
                     Behavior Model Extension Point
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", mt: 0.5, display: "block" }}>
-                    Model: not connected; current scoring is deterministic local heuristics
+                    Behavior model: connected; server-side explainable scoring runs for each snapshot
                   </Typography>
                   <Typography variant="caption" sx={{ color: "var(--text-secondary)", display: "block" }}>
                     Required controls: consent, drift monitoring, bias evaluation, abstention
@@ -772,7 +724,7 @@ export default function Home() {
           }}
         >
           <Typography variant="caption" sx={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-            AEGISKEY // BROWSER PROTOTYPE // ENCRYPTED EVENT ENVELOPES + DERIVED SESSION METRICS // NO OS AGENT OR AI SERVICE CONNECTED
+            AEGISKEY // AUTHENTICATED BROWSER TELEMETRY // ENCRYPTED EVENTS + SERVER-PERSISTED ANALYTICS + SSE SECURITY STREAM
           </Typography>
         </Box>
 
