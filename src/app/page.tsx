@@ -34,6 +34,7 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const dashboardRef = React.useRef<HTMLDivElement>(null);
   const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const telemetrySendChainRef = React.useRef<Promise<void>>(Promise.resolve());
   const [currentApp, setCurrentApp] = useState("Browser typing sandbox");
 
   // Authentication & Transition States
@@ -170,6 +171,14 @@ export default function Home() {
     const telemetry = e.telemetry;
     if (!telemetry) return;
     setTelemetryEvents((previous) => previous.length === 0 || previous[0].sessionId === telemetry.sessionId ? [...previous, telemetry] : [telemetry]);
+    telemetrySendChainRef.current = telemetrySendChainRef.current.then(async () => {
+      const response = await fetch("/api/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [telemetry] }),
+      });
+      if (!response.ok && response.status !== 409) throw new Error(`Telemetry API returned ${response.status}`);
+    }).catch((error) => console.error("Failed to persist sanitized telemetry:", error));
 
     try {
       const encrypted = await encryptEvent({

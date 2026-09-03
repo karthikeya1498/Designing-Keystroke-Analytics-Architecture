@@ -1,8 +1,14 @@
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "@/domain/events/models";
 import type { AnomalyAssessment, BehavioralBaseline } from "@/domain/security/models";
 
+export interface EventAppendResult {
+  accepted: number;
+  replayed: number;
+}
+
 export interface EventRepository {
-  appendEvents(events: readonly SanitizedKeystrokeEvent[]): Promise<void>;
+  ensureSession(sessionId: string, userId: string, startedAt: number, endedAt: number): Promise<void>;
+  appendEvents(events: readonly SanitizedKeystrokeEvent[]): Promise<EventAppendResult>;
   getLatestEvents(limit: number): Promise<readonly SanitizedKeystrokeEvent[]>;
 }
 

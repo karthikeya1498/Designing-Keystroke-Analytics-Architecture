@@ -30,16 +30,25 @@ async function ensureSession(sessionId: string, userId: string, startedAt: numbe
 
 export const postgresStorage: StoragePort = {
   events: {
+    async ensureSession(sessionId: string, userId: string, startedAt: number, endedAt: number) {
+      await ensureSession(sessionId, userId, startedAt, endedAt);
+    },
     async appendEvents(events: readonly SanitizedKeystrokeEvent[]) {
+      let accepted = 0;
+      let replayed = 0;
       for (const event of events) {
-        await pool.query(
+        const result = await pool.query(
           `INSERT INTO keystroke_events
             (event_id, session_id, sequence_number, event_type, key_code, occurred_at, dwell_time_ms, inter_key_latency_ms, is_correction)
            VALUES ($1::uuid, $2::uuid, $3, $4, $5, to_timestamp($6 / 1000.0), $7, $8, $9)
-           ON CONFLICT (event_id) DO NOTHING`,
+           ON CONFLICT (event_id) DO NOTHING
+           RETURNING event_id`,
           [event.eventId, event.sessionId, event.sequenceNumber, event.eventType, event.keyCode, event.timestamp, event.dwellTimeMs ?? null, event.interKeyLatencyMs ?? null, event.isCorrection],
         );
+        if ((result.rowCount ?? 0) > 0) accepted += 1;
+        else replayed += 1;
       }
+      return { accepted, replayed };
     },
     async getLatestEvents(limit: number) {
       const result = await pool.query<SanitizedKeystrokeEvent>(

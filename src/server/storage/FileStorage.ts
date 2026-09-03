@@ -41,8 +41,21 @@ async function readBaselines(): Promise<Record<string, BehavioralBaseline>> {
 
 export const fileStorage: StoragePort = {
   events: {
+    async ensureSession() {
+      // File mode has no relational session table; analytics still binds the user.
+    },
     async appendEvents(events: readonly SanitizedKeystrokeEvent[]) {
-      for (const event of events) await appendJson(eventsPath, event);
+      const existing = new Set((await readJsonLines<SanitizedKeystrokeEvent>(eventsPath)).map((event) => `${event.sessionId}:${event.sequenceNumber}`));
+      let accepted = 0;
+      let replayed = 0;
+      for (const event of events) {
+        const key = `${event.sessionId}:${event.sequenceNumber}`;
+        if (existing.has(key)) { replayed += 1; continue; }
+        await appendJson(eventsPath, event);
+        existing.add(key);
+        accepted += 1;
+      }
+      return { accepted, replayed };
     },
     async getLatestEvents(limit: number) {
       const events = await readJsonLines<SanitizedKeystrokeEvent>(eventsPath);
