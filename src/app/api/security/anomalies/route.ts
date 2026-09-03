@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { publishSecurityEvent } from "../../../../server/realtime/RuntimeSecurityBus";
 import { getSessionUsernameFromCookieHeader } from "../../../utils/auth";
-import { fileStorage } from "../../../../server/storage/FileStorage";
+import { runtimeStorage } from "../../../../server/storage/RuntimeStorage";
 import type { AnomalyAssessment } from "../../../../domain/security/models";
 
 function authenticatedUser(request: Request): string | null {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   const parsed = assessmentSchema.safeParse(await request.json());
   if (!parsed.success || parsed.data.userId !== userId) return NextResponse.json({ error: "Invalid anomaly assessment" }, { status: 422 });
   const assessment = parsed.data as AnomalyAssessment;
-  await fileStorage.anomalies.append(assessment);
+  await runtimeStorage.anomalies.append(assessment);
   await publishSecurityEvent(userId, { type: "anomaly", payload: assessment });
   return NextResponse.json({ assessment }, { status: 201 });
 }
@@ -30,5 +30,5 @@ export async function GET(request: Request) {
   const userId = authenticatedUser(request);
   if (!userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   const limit = Math.min(100, Math.max(1, Number(new URL(request.url).searchParams.get("limit") ?? 20)));
-  return NextResponse.json({ assessments: await fileStorage.anomalies.listRecent(userId, limit) });
+  return NextResponse.json({ assessments: await runtimeStorage.anomalies.listRecent(userId, limit) });
 }

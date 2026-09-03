@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSessionUsernameFromCookieHeader } from "../../../utils/auth";
 import { buildBaseline } from "../../../../domain/security/AnomalyDetector";
 import type { BehavioralFeatureVector } from "../../../../domain/analytics/FeatureExtractor";
-import { fileStorage } from "../../../../server/storage/FileStorage";
+import { runtimeStorage } from "../../../../server/storage/RuntimeStorage";
 import { publishSecurityEvent } from "../../../../server/realtime/RuntimeSecurityBus";
 
 const featureSchema = z.object({
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const parsed = z.object({ sessions: z.array(featureSchema).min(1).max(100) }).safeParse(await request.json());
   if (!parsed.success || parsed.data.sessions.some((session) => session.userId !== userId)) return NextResponse.json({ error: "Invalid baseline payload" }, { status: 422 });
   const baseline = buildBaseline(userId, parsed.data.sessions as BehavioralFeatureVector[]);
-  await fileStorage.baselines.save(baseline);
+  await runtimeStorage.baselines.save(baseline);
   await publishSecurityEvent(userId, { type: "baseline", payload: baseline });
   return NextResponse.json({ baseline }, { status: 201 });
 }

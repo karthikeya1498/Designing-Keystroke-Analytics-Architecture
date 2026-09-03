@@ -5,7 +5,7 @@ import type { AnalyticsSnapshot } from "../../../domain/events/models";
 import type { BehavioralFeatureVector } from "../../../domain/analytics/FeatureExtractor";
 import { buildBaseline } from "../../../domain/security/AnomalyDetector";
 import { scoreContinuousAuthentication } from "../../../domain/security/ContinuousAuthentication";
-import { fileStorage } from "../../../server/storage/FileStorage";
+import { runtimeStorage } from "../../../server/storage/RuntimeStorage";
 import { publishSecurityEvent } from "../../../server/realtime/RuntimeSecurityBus";
 
 const featureSchema = z.object({
@@ -40,18 +40,24 @@ export async function POST(request: Request) {
     if (!parsed.success || parsed.data.userId !== userId) return NextResponse.json({ error: "Invalid analytics payload" }, { status: 422 });
 
     const features = parsed.data as BehavioralFeatureVector;
-    const baseline = await fileStorage.baselines.get(userId) ?? buildBaseline(userId, []);
+    const baseline = await runtimeStorage.baselines.get(userId) ?? buildBaseline(userId, []);
     const authentication = scoreContinuousAuthentication(baseline, features);
     const snapshot: AnalyticsSnapshot = {
       sessionId: features.sessionId,
       userId,
       startedAt: features.startedAt,
       endedAt: features.endedAt,
+      durationSeconds: features.durationSeconds,
+      characterCount: features.characterCount,
+      medianDwellMs: features.medianDwellMs,
+      medianInterKeyMs: features.medianInterKeyMs,
+      p95InterKeyMs: features.p95InterKeyMs,
+      pauseCount: features.pauseCount,
+      fatigueScore: features.fatigueScore,
       keyCount: features.keyCount,
       backspaceCount: features.backspaceCount,
       correctionCount: features.correctionCount,
       meanInterKeyMs: features.meanInterKeyMs,
-      p95InterKeyMs: features.p95InterKeyMs,
       meanDwellMs: features.meanDwellMs,
       p95DwellMs: features.p95DwellMs,
       estimatedWpm: features.estimatedWpm,
@@ -59,7 +65,7 @@ export async function POST(request: Request) {
       anomalyScore: authentication.riskScore,
       riskLevel: authentication.riskLevel,
     };
-    await fileStorage.analytics.saveSnapshot(snapshot);
+    await runtimeStorage.analytics.saveSnapshot(snapshot);
     await publishSecurityEvent(userId, { type: "analytics", payload: snapshot });
     if (authentication.riskScore !== null) await publishSecurityEvent(userId, { type: "anomaly", payload: authentication.assessment });
     return NextResponse.json({ snapshot, authentication }, { status: 201 });
@@ -75,5 +81,5 @@ export async function GET(request: Request) {
   if (!userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   const sessionId = new URL(request.url).searchParams.get("sessionId");
   if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
-  return NextResponse.json({ snapshot: await fileStorage.analytics.getSessionSummary(sessionId) });
+  return NextResponse.json({ snapshot: await runtimeStorage.analytics.getSessionSummary(sessionId) });
 }

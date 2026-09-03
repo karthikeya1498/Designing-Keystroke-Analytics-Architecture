@@ -31,6 +31,12 @@ export interface SessionSummary {
 }
 
 export interface AnalyticsSnapshot extends SessionSummary {
+  characterCount?: number;
+  durationSeconds?: number;
+  medianDwellMs?: number | null;
+  medianInterKeyMs?: number | null;
+  pauseCount?: number;
+  fatigueScore?: number;
   anomalyScore: number | null;
   riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "BASELINE_BUILDING";
 }
