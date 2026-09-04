@@ -1,0 +1,20 @@
+flowchart LR
+  B[Browser KeyboardSandbox\nSanitized metadata only] --> T[POST /api/telemetry\nUUID + sequence validation]
+  B --> A[POST /api/analytics\nFeature snapshot]
+  T --> S[(PostgreSQL\nusers / sessions / events)]
+  A --> P[TypeScript policy boundary\nAuthenticated account scope]
+  P --> M[Python ML service\nVersioned Isolation Forest]
+  M --> P
+  P --> D[(PostgreSQL\nanalytics / assessments)]
+  P --> R{Risk policy}
+  R -->|low or baseline| E[(PostgreSQL\naudit log)]
+  R -->|high or critical| L[(PostgreSQL\nsecurity alert)]
+  L --> E
+  P --> X[Redis pub/sub]
+  X --> V[Authenticated SSE]
+  V --> U[SaaS dashboard\nanalytics + security views]
+
+  classDef private fill:#e8f0e1,stroke:#566b3b,color:#1c2818;
+  classDef service fill:#f5f1e8,stroke:#8f7b5a,color:#30281e;
+  class B,T,A,P,R,V,U private;
+  class M,X service;
