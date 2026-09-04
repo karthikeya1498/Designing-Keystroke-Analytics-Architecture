@@ -39,9 +39,9 @@ export default function DashboardNav({ activeTab, onTabChange, mode, onModeChang
         <Gauge size={18} />
         <span>AEGISKEY</span>
       </Box>
-      <Box className="dashboard-nav-items">
+      <Box className="dashboard-nav-items" role="tablist" aria-label="Dashboard views">
         {ITEMS.map(({ id, label, icon: Icon }) => (
-          <button key={id} className={`dashboard-nav-item ${activeTab === id ? "active" : ""}`} onClick={() => onTabChange(id)} aria-current={activeTab === id ? "page" : undefined}>
+          <button type="button" key={id} role="tab" className={`dashboard-nav-item ${activeTab === id ? "active" : ""}`} onClick={() => onTabChange(id)} aria-selected={activeTab === id} aria-current={activeTab === id ? "page" : undefined}>
             <Icon size={16} />
             <span>{label}</span>
           </button>
@@ -51,12 +51,12 @@ export default function DashboardNav({ activeTab, onTabChange, mode, onModeChang
         <Typography className="dashboard-nav-hint">Swipe with two fingers to change dashboards</Typography>
         <Box className="dashboard-mode-switcher" aria-label="Navigation layout">
           {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={`dashboard-mode-button ${mode === id ? "active" : ""}`} onClick={() => onModeChange(id)} title={`${label} navigation`} aria-label={`${label} navigation`}>
+            <button type="button" key={id} className={`dashboard-mode-button ${mode === id ? "active" : ""}`} onClick={() => onModeChange(id)} title={`${label} navigation`} aria-label={`${label} navigation`} aria-pressed={mode === id}>
               <Icon size={14} />
             </button>
           ))}
         </Box>
-        <button className="dashboard-fullscreen-button" onClick={onFullscreen} title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
+        <button type="button" className="dashboard-fullscreen-button" onClick={onFullscreen} title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
           {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           <span>{isFullscreen ? "Exit" : "Full screen"}</span>
         </button>
