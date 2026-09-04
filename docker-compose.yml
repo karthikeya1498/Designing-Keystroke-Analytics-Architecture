@@ -7,8 +7,6 @@ services:
     environment:
       NODE_ENV: production
       AEGISKEY_SESSION_SECRET: ${AEGISKEY_SESSION_SECRET:?Set AEGISKEY_SESSION_SECRET in .env.production}
-      AEGISKEY_DASHBOARD_USER: ${AEGISKEY_DASHBOARD_USER:?Set AEGISKEY_DASHBOARD_USER in .env.production}
-      AEGISKEY_DASHBOARD_PASSWORD: ${AEGISKEY_DASHBOARD_PASSWORD:?Set AEGISKEY_DASHBOARD_PASSWORD in .env.production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-aegiskey}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/${POSTGRES_DB:-aegiskey}
       REDIS_URL: redis://redis:6379
     depends_on:
@@ -19,7 +17,7 @@ services:
     ports:
       - "${APP_1_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -32,8 +30,6 @@ services:
     environment:
       NODE_ENV: production
       AEGISKEY_SESSION_SECRET: ${AEGISKEY_SESSION_SECRET:?Set AEGISKEY_SESSION_SECRET in .env.production}
-      AEGISKEY_DASHBOARD_USER: ${AEGISKEY_DASHBOARD_USER:?Set AEGISKEY_DASHBOARD_USER in .env.production}
-      AEGISKEY_DASHBOARD_PASSWORD: ${AEGISKEY_DASHBOARD_PASSWORD:?Set AEGISKEY_DASHBOARD_PASSWORD in .env.production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-aegiskey}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/${POSTGRES_DB:-aegiskey}
       REDIS_URL: redis://redis:6379
     depends_on:
@@ -44,7 +40,7 @@ services:
     ports:
       - "${APP_2_PORT:-3001}:3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -92,6 +88,7 @@ services:
     volumes:
       - aegiskey-postgres-data:/var/lib/postgresql/data
       - ./database/migrations/001_initial_privacy_schema.sql:/docker-entrypoint-initdb.d/001-initial-privacy-schema.sql:ro
+      - ./database/migrations/002_runtime_analytics_storage.sql:/docker-entrypoint-initdb.d/002-runtime-analytics-storage.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aegiskey} -d $${POSTGRES_DB:-aegiskey}"]
       interval: 5s

@@ -1,0 +1,66 @@
+name: AegisKey CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JavaScript dependencies
+        run: npm ci --ignore-scripts
+
+      - name: JavaScript dependency audit
+        run: npm audit --audit-level=high
+
+      - name: TypeScript tests
+        run: npm test -- --run
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Repository whitespace check
+        run: git diff --check
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ML service dependencies
+        run: python -m pip install --requirement ml-service/requirements.txt pytest pip-audit
+
+      - name: Python tests
+        working-directory: ml-service
+        run: pytest -q
+
+      - name: Python dependency audit
+        run: pip-audit -r ml-service/requirements.txt
+
+      - name: Secret pattern scan
+        shell: bash
+        run: |
+          pattern='-----BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY-----|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{20,}'
+          if git grep -I -n -E -i -- "$pattern" -- ':!package-lock.json' ':!*.md'; then
+            echo 'High-confidence secret pattern detected in tracked source.'
+            exit 1
+          fi

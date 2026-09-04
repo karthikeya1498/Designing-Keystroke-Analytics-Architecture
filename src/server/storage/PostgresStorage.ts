@@ -19,6 +19,15 @@ const pool = new Pool({
   application_name: "aegiskey-runtime",
 });
 
+export async function checkPostgresHealth(): Promise<boolean> {
+  try {
+    await pool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureSession(sessionId: string, userId: string, startedAt: number, endedAt: number): Promise<void> {
   await pool.query(
     `INSERT INTO sessions (id, user_id, started_at, ended_at)
