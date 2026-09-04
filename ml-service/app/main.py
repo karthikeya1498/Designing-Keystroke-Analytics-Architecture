@@ -164,7 +164,11 @@ def assess(model: BaselineModel, session: FeatureVector) -> dict:
         if abs(z_score) >= 2:
             signals.append({
                 "metric": metric,
+                "observed": float(getattr(session, metric) if getattr(session, metric) is not None else model.imputation_values[index]),
+                "baseline_mean": round(float(model.imputation_values[index]), 6),
+                "standard_deviation": round(float(model.scaler.scale_[index]), 6),
                 "z_score": round(z_score, 3),
+                "contribution": round(abs(z_score), 3),
                 "direction": "ABOVE" if z_score > 0 else "BELOW",
                 "explanation": f"{metric} is {abs(z_score):.1f} standardized deviations from enrollment data.",
             })

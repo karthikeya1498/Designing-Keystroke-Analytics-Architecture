@@ -4,6 +4,8 @@ import { z } from "zod";
 import { getSessionUsernameFromCookieHeader } from "../../utils/auth";
 import type { AnalyticsSnapshot } from "../../../domain/events/models";
 import type { BehavioralFeatureVector } from "../../../domain/analytics/FeatureExtractor";
+import type { AnomalyAssessment } from "../../../domain/security/models";
+import { inferWithMl } from "../../../server/mlClient";
 import { buildBaseline } from "../../../domain/security/AnomalyDetector";
 import { scoreContinuousAuthentication } from "../../../domain/security/ContinuousAuthentication";
 import { runtimeStorage } from "../../../server/storage/RuntimeStorage";
@@ -30,8 +32,7 @@ const featureSchema = z.object({
   p95InterKeyMs: z.number().nonnegative().nullable(),
   pauseCount: z.number().int().nonnegative(),
   fatigueScore: z.number().min(0).max(100),
-}).strict();
-
+}).strict().refine((value) => value.endedAt >= value.startedAt, { message: "endedAt must be greater than or equal to startedAt" });
 export async function POST(request: Request) {
   const userId = getSessionUsernameFromCookieHeader(request.headers.get("cookie"));
   if (!userId) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -42,7 +43,21 @@ export async function POST(request: Request) {
 
     const features = parsed.data as BehavioralFeatureVector;
     const baseline = await runtimeStorage.baselines.get(userId) ?? buildBaseline(userId, []);
-    const authentication = scoreContinuousAuthentication(baseline, features);
+    const fallback = scoreContinuousAuthentication(baseline, features);
+    const mlDecision = process.env.ML_SERVICE_URL ? await inferWithMl(features) : null;
+    const riskScore = mlDecision?.risk_score ?? fallback.riskScore;
+    const riskLevel = mlDecision ? (mlDecision.risk_score >= 90 ? "CRITICAL" : mlDecision.risk_score >= 75 ? "HIGH" : mlDecision.risk_score >= 45 ? "MEDIUM" : "LOW") : fallback.riskLevel;
+    const assessment: AnomalyAssessment = mlDecision ? {
+      userId,
+      sessionId: features.sessionId,
+      riskScore: mlDecision.risk_score,
+      riskLevel,
+      confidence: Math.min(1, mlDecision.sample_count / 20),
+      isBaselineReady: mlDecision.sample_count >= 5,
+      signals: mlDecision.signals.map((signal) => ({ metric: signal.metric as AnomalyAssessment["signals"][number]["metric"], observed: signal.observed, baselineMean: signal.baseline_mean, standardDeviation: signal.standard_deviation, zScore: signal.z_score, contribution: signal.contribution, direction: signal.direction, explanation: signal.explanation })),
+      explanation: mlDecision.is_anomaly ? "Python ML inference classified this snapshot as anomalous." : "Python ML inference found no anomalous deviation above policy threshold.",
+    } : fallback.assessment;
+    const authentication = { riskScore, trustScore: mlDecision?.trust_score ?? fallback.trustScore, riskLevel, assessment };
     const snapshot: AnalyticsSnapshot = {
       sessionId: features.sessionId,
       userId,
