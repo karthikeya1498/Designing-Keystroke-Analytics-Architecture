@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
+from .evaluation import classification_metrics
+
 # Author: Karthikeya
 # The Python service owns model inference. TypeScript is responsible for event
 # collection/feature extraction and policy presentation, not a second ML score.
@@ -209,5 +211,8 @@ def infer(request: InferenceRequest) -> dict:
 def evaluate(request: EvaluationRequest) -> dict:
     model = build_model(request.baseline.sessions)
     results = [assess(model, case.session) for case in request.cases]
-    correct = sum((result["is_anomaly"] == case.expected_anomaly) for result, case in zip(results, request.cases))
-    return {"accuracy": round(correct / len(results), 4), "correct": correct, "total": len(results), "model_version": MODEL_VERSION, "results": results}
+    expected = [case.expected_anomaly for case in request.cases]
+    predicted = [result["is_anomaly"] for result in results]
+    risk_scores = [float(result["risk_score"]) for result in results]
+    metrics = classification_metrics(expected, predicted, risk_scores)
+    return {"metrics": metrics, "correct": metrics["true_positive"] + metrics["true_negative"], "total": len(results), "model_version": MODEL_VERSION, "results": results}

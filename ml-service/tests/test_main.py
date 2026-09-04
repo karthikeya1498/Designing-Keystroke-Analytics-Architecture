@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.evaluation import classification_metrics
 from app.main import app, baselines
 
 client = TestClient(app)
@@ -64,4 +65,16 @@ def test_evaluation_reports_accuracy():
     response = client.post("/v1/evaluate", json=cases)
     assert response.status_code == 200
     assert response.json()["total"] == 2
-    assert 0 <= response.json()["accuracy"] <= 1
+    metrics = response.json()["metrics"]
+    assert 0 <= metrics["accuracy"] <= 1
+    assert 0 <= metrics["precision"] <= 1
+    assert 0 <= metrics["recall"] <= 1
+    assert metrics["roc_auc"] is not None
+    assert metrics["pr_auc"] is not None
+
+
+def test_metrics_handle_single_class_labels_without_fake_auc():
+    metrics = classification_metrics([False, False], [False, True], [10.0, 90.0])
+    assert metrics["false_positive_rate"] == 0.5
+    assert metrics["roc_auc"] is None
+    assert metrics["pr_auc"] is None
