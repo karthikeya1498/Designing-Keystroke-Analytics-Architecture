@@ -1,5 +1,5 @@
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "@/domain/events/models";
-import type { AnomalyAssessment, BehavioralBaseline } from "@/domain/security/models";
+import type { AnomalyAssessment, BehavioralBaseline, SecurityAlert } from "@/domain/security/models";
 
 export interface EventAppendResult {
   accepted: number;
@@ -32,10 +32,16 @@ export interface AnomalyRepository {
   listRecent(userId: string, limit: number): Promise<readonly AnomalyAssessment[]>;
 }
 
+export interface AlertRepository {
+  create(alert: SecurityAlert): Promise<void>;
+  listOpen(userId: string, limit: number): Promise<readonly SecurityAlert[]>;
+}
+
 export interface StoragePort {
   events: EventRepository;
   analytics: AnalyticsRepository;
   audit: AuditRepository;
   baselines: BaselineRepository;
   anomalies: AnomalyRepository;
+  alerts: AlertRepository;
 }

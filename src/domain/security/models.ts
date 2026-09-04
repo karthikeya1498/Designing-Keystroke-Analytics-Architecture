@@ -52,3 +52,17 @@ export interface ContinuousAuthenticationSnapshot {
   riskLevel: RiskLevel;
   assessment: AnomalyAssessment;
 }
+
+export type AlertStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+
+export interface SecurityAlert {
+  id: string;
+  userId: string;
+  sessionId: string;
+  severity: Exclude<RiskLevel, "BASELINE_BUILDING">;
+  title: string;
+  explanation: string;
+  status: AlertStatus;
+  createdAt: number;
+  resolvedAt?: number;
+}

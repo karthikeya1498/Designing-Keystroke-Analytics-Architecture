@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUsernameFromCookieHeader } from "../../utils/auth";
@@ -66,8 +67,17 @@ export async function POST(request: Request) {
       riskLevel: authentication.riskLevel,
     };
     await runtimeStorage.analytics.saveSnapshot(snapshot);
+    if (authentication.riskScore !== null) {
+      await runtimeStorage.anomalies.append(authentication.assessment);
+      await runtimeStorage.audit.append({ actorId: userId, action: "ANOMALY_DETECTED", timestamp: Date.now(), result: "SUCCESS", metadata: { sessionId: features.sessionId, riskScore: authentication.riskScore, riskLevel: authentication.riskLevel } });
+      if (authentication.riskLevel !== "BASELINE_BUILDING" && authentication.riskScore >= 75) {
+        const alert = { id: randomUUID(), userId, sessionId: features.sessionId, severity: authentication.riskLevel, title: `Behavioral anomaly detected: ${authentication.riskLevel}`, explanation: authentication.assessment.explanation, status: "OPEN" as const, createdAt: Date.now() };
+        await runtimeStorage.alerts.create(alert);
+        await runtimeStorage.audit.append({ actorId: userId, action: "ALERT_CREATED", timestamp: alert.createdAt, result: "SUCCESS", metadata: { alertId: alert.id, sessionId: alert.sessionId, severity: alert.severity } });
+        await publishSecurityEvent(userId, { type: "anomaly", payload: authentication.assessment });
+      }
+    }
     await publishSecurityEvent(userId, { type: "analytics", payload: snapshot });
-    if (authentication.riskScore !== null) await publishSecurityEvent(userId, { type: "anomaly", payload: authentication.assessment });
     return NextResponse.json({ snapshot, authentication }, { status: 201 });
   } catch (error) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });

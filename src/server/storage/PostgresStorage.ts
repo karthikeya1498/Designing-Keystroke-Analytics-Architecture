@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "../../domain/events/models";
-import type { AnomalyAssessment, BehavioralBaseline } from "../../domain/security/models";
+import type { AnomalyAssessment, BehavioralBaseline, SecurityAlert } from "../../domain/security/models";
 import type { StoragePort } from "./StoragePort";
 
 /**
@@ -76,10 +76,10 @@ export const postgresStorage: StoragePort = {
   },
   audit: {
     async append(event: AuditEvent) {
-      await pool.query(`INSERT INTO audit_logs (action, result, metadata, created_at) VALUES ($1, $2, $3::jsonb, to_timestamp($4 / 1000.0))`, [event.action, event.result, JSON.stringify({ actorId: event.actorId, ...(event.metadata ?? {}) }), event.timestamp]);
+      await pool.query(`INSERT INTO audit_logs (actor_id, action, result, metadata, created_at) SELECT id, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0) FROM users WHERE email = $1`, [event.actorId, event.action, event.result, JSON.stringify(event.metadata ?? {}), event.timestamp]);
     },
     async listRecent(limit: number) {
-      const result = await pool.query<AuditEvent>(`SELECT metadata->>'actorId' AS "actorId", action, result, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp, metadata FROM audit_logs ORDER BY created_at DESC LIMIT $1`, [limit]);
+      const result = await pool.query<AuditEvent>(`SELECT COALESCE(u.email, 'system') AS "actorId", action, result, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp, metadata FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id ORDER BY created_at DESC LIMIT $1`, [limit]);
       return result.rows;
     },
   },
@@ -100,6 +100,15 @@ export const postgresStorage: StoragePort = {
     async listRecent(userId: string, limit: number) {
       const result = await pool.query<{ assessment: AnomalyAssessment }>(`SELECT a.assessment FROM anomaly_assessments a JOIN users u ON u.id = a.user_id WHERE u.email = $1 ORDER BY a.created_at DESC LIMIT $2`, [userId, limit]);
       return result.rows.map((row) => row.assessment);
+    },
+  },
+  alerts: {
+    async create(alert: SecurityAlert) {
+      await pool.query(`INSERT INTO security_alerts (id, user_id, session_id, severity, title, explanation, status, created_at, resolved_at) SELECT $1::uuid, u.id, $2::uuid, $3, $4, $5, $6, to_timestamp($7 / 1000.0), CASE WHEN $8::bigint IS NULL THEN NULL ELSE to_timestamp($8 / 1000.0) END FROM users u WHERE u.email = $9`, [alert.id, alert.sessionId, alert.severity, alert.title, alert.explanation, alert.status, alert.createdAt, alert.resolvedAt ?? null, alert.userId]);
+    },
+    async listOpen(userId: string, limit: number) {
+      const result = await pool.query<SecurityAlert>(`SELECT a.id, u.email AS "userId", a.session_id AS "sessionId", a.severity, a.title, a.explanation, a.status, EXTRACT(EPOCH FROM a.created_at) * 1000 AS "createdAt", EXTRACT(EPOCH FROM a.resolved_at) * 1000 AS "resolvedAt" FROM security_alerts a JOIN users u ON u.id = a.user_id WHERE u.email = $1 AND a.status = 'OPEN' ORDER BY a.created_at DESC LIMIT $2`, [userId, limit]);
+      return result.rows;
     },
   },
 };

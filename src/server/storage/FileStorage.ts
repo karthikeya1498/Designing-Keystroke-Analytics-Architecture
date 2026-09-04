@@ -1,7 +1,7 @@
 import { mkdir, appendFile, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "@/domain/events/models";
-import type { AnomalyAssessment, BehavioralBaseline } from "@/domain/security/models";
+import type { AnomalyAssessment, BehavioralBaseline, SecurityAlert } from "@/domain/security/models";
 import type { StoragePort } from "./StoragePort";
 
 const dataDirectory = path.join(process.cwd(), "data");
@@ -10,6 +10,7 @@ const snapshotsPath = path.join(dataDirectory, "analytics_snapshots.jsonl");
 const auditPath = path.join(dataDirectory, "audit_events.jsonl");
 const baselinesPath = path.join(dataDirectory, "baselines.json");
 const anomaliesPath = path.join(dataDirectory, "anomaly_assessments.jsonl");
+const alertsPath = path.join(dataDirectory, "security_alerts.jsonl");
 
 async function ensureDataDirectory(): Promise<void> {
   await mkdir(dataDirectory, { recursive: true });
@@ -95,6 +96,13 @@ export const fileStorage: StoragePort = {
     async listRecent(userId: string, limit: number) {
       const assessments = await readJsonLines<AnomalyAssessment>(anomaliesPath);
       return assessments.filter((assessment) => assessment.userId === userId).slice(-Math.max(0, limit)).reverse();
+    },
+  },
+  alerts: {
+    async create(alert: SecurityAlert) { await appendJson(alertsPath, alert); },
+    async listOpen(userId: string, limit: number) {
+      const alerts = await readJsonLines<SecurityAlert>(alertsPath);
+      return alerts.filter((alert) => alert.userId === userId && alert.status === "OPEN").slice(-Math.max(0, limit)).reverse();
     },
   },
 };
