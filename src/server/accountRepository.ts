@@ -44,6 +44,13 @@ export async function createAccount(email: string, password: string): Promise<{ 
   return result.rows[0];
 }
 
+export type AccountRole = "USER" | "ANALYST" | "ADMIN";
+
+export async function getAccountRole(email: string): Promise<AccountRole | null> {
+  const result = await getPool().query<{ role: AccountRole }>("SELECT role FROM users WHERE lower(email) = lower($1) LIMIT 1", [email]);
+  return result.rows[0]?.role ?? null;
+}
+
 export async function authenticateAccount(email: string, password: string): Promise<{ id: string; email: string } | null> {
   const result = await getPool().query<{ id: string; email: string; password_hash: string }>("SELECT id, email, password_hash FROM users WHERE lower(email) = lower($1) LIMIT 1", [email]);
   const account = result.rows[0];

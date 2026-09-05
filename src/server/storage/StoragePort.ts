@@ -1,5 +1,6 @@
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "@/domain/events/models";
 import type { AnomalyAssessment, BehavioralBaseline, SecurityAlert } from "@/domain/security/models";
+import type { AuditIntegrityResult, DeviceRegistration, EnrolledDevice } from "@/domain/security/deviceModels";
 
 export interface EventAppendResult {
   accepted: number;
@@ -37,6 +38,18 @@ export interface AlertRepository {
   listOpen(userId: string, limit: number): Promise<readonly SecurityAlert[]>;
 }
 
+export interface DeviceRepository {
+  register(userId: string, registration: DeviceRegistration): Promise<EnrolledDevice>;
+  listForUser(userId: string): Promise<readonly EnrolledDevice[]>;
+  getOwned(userId: string, deviceId: string): Promise<EnrolledDevice | null>;
+  revoke(userId: string, deviceId: string): Promise<boolean>;
+  markSeen(deviceId: string): Promise<void>;
+}
+
+export interface AuditIntegrityRepository {
+  verify(): Promise<AuditIntegrityResult>;
+}
+
 export interface StoragePort {
   events: EventRepository;
   analytics: AnalyticsRepository;
@@ -44,4 +57,6 @@ export interface StoragePort {
   baselines: BaselineRepository;
   anomalies: AnomalyRepository;
   alerts: AlertRepository;
+  devices: DeviceRepository;
+  auditIntegrity: AuditIntegrityRepository;
 }

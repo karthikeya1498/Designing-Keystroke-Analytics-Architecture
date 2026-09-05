@@ -1,6 +1,8 @@
+import { createHash, randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import type { AnalyticsSnapshot, AuditEvent, SanitizedKeystrokeEvent, SessionSummary } from "../../domain/events/models";
 import type { AnomalyAssessment, BehavioralBaseline, SecurityAlert } from "../../domain/security/models";
+import type { AuditIntegrityResult, DeviceRegistration, EnrolledDevice } from "../../domain/security/deviceModels";
 import type { StoragePort } from "./StoragePort";
 
 /**
@@ -18,6 +20,14 @@ const pool = new Pool({
   statement_timeout: 5_000,
   application_name: "aegiskey-runtime",
 });
+
+function auditEntryHash(previousHash: string, event: { actorId: string; action: string; timestamp: number; result: string; metadata: Record<string, string | number | boolean> }): string {
+  return createHash("sha256").update(JSON.stringify({ previousHash, actorId: event.actorId, action: event.action, timestamp: event.timestamp, result: event.result, metadata: event.metadata })).digest("hex");
+}
+
+function mapDevice(row: { id: string; userId: string; name: string; algorithm: "Ed25519"; publicKey: string; createdAt: number; lastSeenAt?: number; revokedAt?: number }): EnrolledDevice {
+  return row;
+}
 
 export async function checkPostgresHealth(): Promise<boolean> {
   try {
@@ -48,11 +58,11 @@ export const postgresStorage: StoragePort = {
       for (const event of events) {
         const result = await pool.query(
           `INSERT INTO keystroke_events
-            (event_id, session_id, sequence_number, event_type, key_code, occurred_at, dwell_time_ms, inter_key_latency_ms, is_correction)
-           VALUES ($1::uuid, $2::uuid, $3, $4, $5, to_timestamp($6 / 1000.0), $7, $8, $9)
+            (event_id, session_id, sequence_number, event_type, key_code, occurred_at, dwell_time_ms, inter_key_latency_ms, is_correction, device_id, signature_verified)
+           VALUES ($1::uuid, $2::uuid, $3, $4, $5, to_timestamp($6 / 1000.0), $7, $8, $9, $10::uuid, $11)
            ON CONFLICT (event_id) DO NOTHING
            RETURNING event_id`,
-          [event.eventId, event.sessionId, event.sequenceNumber, event.eventType, event.keyCode, event.timestamp, event.dwellTimeMs ?? null, event.interKeyLatencyMs ?? null, event.isCorrection],
+          [event.eventId, event.sessionId, event.sequenceNumber, event.eventType, event.keyCode, event.timestamp, event.dwellTimeMs ?? null, event.interKeyLatencyMs ?? null, event.isCorrection, event.deviceId ?? null, event.signatureVerified ?? false],
         );
         if ((result.rowCount ?? 0) > 0) accepted += 1;
         else replayed += 1;
@@ -85,10 +95,21 @@ export const postgresStorage: StoragePort = {
   },
   audit: {
     async append(event: AuditEvent) {
-      await pool.query(`INSERT INTO audit_logs (actor_id, action, result, metadata, created_at) SELECT id, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0) FROM users WHERE email = $1`, [event.actorId, event.action, event.result, JSON.stringify(event.metadata ?? {}), event.timestamp]);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('aegiskey-audit-chain'))");
+        const previous = await client.query<{ entryHash: string | null }>(`SELECT entry_hash AS "entryHash" FROM audit_logs ORDER BY created_at DESC, id DESC LIMIT 1`);
+        const previousHash = previous.rows[0]?.entryHash ?? "GENESIS";
+        const id = event.id ?? randomUUID();
+        const metadata = event.metadata ?? {};
+        const entryHash = auditEntryHash(previousHash, { actorId: event.actorId, action: event.action, timestamp: event.timestamp, result: event.result, metadata });
+        await client.query(`INSERT INTO audit_logs (id, actor_id, action, result, metadata, created_at, audit_timestamp_ms, previous_hash, entry_hash, hash_algorithm) SELECT $1::uuid, id, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0), $5, $6, $7, 'sha256' FROM users WHERE email = $8`, [id, event.action, event.result, JSON.stringify(metadata), event.timestamp, previousHash, entryHash, event.actorId]);
+        await client.query("COMMIT");
+      } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
     },
     async listRecent(limit: number) {
-      const result = await pool.query<AuditEvent>(`SELECT COALESCE(u.email, 'system') AS "actorId", action, result, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp, metadata FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id ORDER BY created_at DESC LIMIT $1`, [limit]);
+      const result = await pool.query<AuditEvent>(`SELECT l.id, COALESCE(u.email, 'system') AS "actorId", action, result, COALESCE(audit_timestamp_ms, round(EXTRACT(EPOCH FROM created_at) * 1000)::bigint) AS timestamp, metadata, previous_hash AS "previousHash", entry_hash AS "entryHash", hash_algorithm AS "hashAlgorithm" FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id ORDER BY created_at DESC, id DESC LIMIT $1`, [limit]);
       return result.rows;
     },
   },
@@ -118,6 +139,40 @@ export const postgresStorage: StoragePort = {
     async listOpen(userId: string, limit: number) {
       const result = await pool.query<SecurityAlert>(`SELECT a.id, u.email AS "userId", a.session_id AS "sessionId", a.severity, a.title, a.explanation, a.status, EXTRACT(EPOCH FROM a.created_at) * 1000 AS "createdAt", EXTRACT(EPOCH FROM a.resolved_at) * 1000 AS "resolvedAt" FROM security_alerts a JOIN users u ON u.id = a.user_id WHERE u.email = $1 AND a.status = 'OPEN' ORDER BY a.created_at DESC LIMIT $2`, [userId, limit]);
       return result.rows;
+    },
+  },
+  devices: {
+    async register(userId: string, registration: DeviceRegistration) {
+      const result = await pool.query<EnrolledDevice>(`INSERT INTO devices (user_id, name, algorithm, public_key) SELECT id, $2, $3, $4 FROM users WHERE email = $1 RETURNING id, user_id AS "userId", name, algorithm, public_key AS "publicKey", EXTRACT(EPOCH FROM created_at) * 1000 AS "createdAt", EXTRACT(EPOCH FROM last_seen_at) * 1000 AS "lastSeenAt", EXTRACT(EPOCH FROM revoked_at) * 1000 AS "revokedAt"`, [userId, registration.name, registration.algorithm, registration.publicKey]);
+      if (!result.rows[0]) throw new Error("ACCOUNT_NOT_FOUND");
+      return mapDevice(result.rows[0]);
+    },
+    async listForUser(userId: string) {
+      const result = await pool.query<EnrolledDevice>(`SELECT d.id, u.email AS "userId", d.name, d.algorithm, d.public_key AS "publicKey", EXTRACT(EPOCH FROM d.created_at) * 1000 AS "createdAt", EXTRACT(EPOCH FROM d.last_seen_at) * 1000 AS "lastSeenAt", EXTRACT(EPOCH FROM d.revoked_at) * 1000 AS "revokedAt" FROM devices d JOIN users u ON u.id = d.user_id WHERE u.email = $1 ORDER BY d.created_at DESC`, [userId]);
+      return result.rows.map(mapDevice);
+    },
+    async getOwned(userId: string, deviceId: string) {
+      const result = await pool.query<EnrolledDevice>(`SELECT d.id, u.email AS "userId", d.name, d.algorithm, d.public_key AS "publicKey", EXTRACT(EPOCH FROM d.created_at) * 1000 AS "createdAt", EXTRACT(EPOCH FROM d.last_seen_at) * 1000 AS "lastSeenAt", EXTRACT(EPOCH FROM d.revoked_at) * 1000 AS "revokedAt" FROM devices d JOIN users u ON u.id = d.user_id WHERE u.email = $1 AND d.id = $2::uuid AND d.revoked_at IS NULL`, [userId, deviceId]);
+      return result.rows[0] ? mapDevice(result.rows[0]) : null;
+    },
+    async revoke(userId: string, deviceId: string) {
+      const result = await pool.query(`UPDATE devices d SET revoked_at = now() FROM users u WHERE d.user_id = u.id AND u.email = $1 AND d.id = $2::uuid AND d.revoked_at IS NULL`, [userId, deviceId]);
+      return (result.rowCount ?? 0) > 0;
+    },
+    async markSeen(deviceId: string) { await pool.query(`UPDATE devices SET last_seen_at = now() WHERE id = $1::uuid AND revoked_at IS NULL`, [deviceId]); },
+  },
+  auditIntegrity: {
+    async verify(): Promise<AuditIntegrityResult> {
+      const result = await pool.query<{ id: string; previousHash: string | null; entryHash: string | null; actorId: string; action: string; timestamp: number; result: string; metadata: Record<string, string | number | boolean> }>(`SELECT l.id, l.previous_hash AS "previousHash", l.entry_hash AS "entryHash", COALESCE(u.email, 'system') AS "actorId", l.action, COALESCE(l.audit_timestamp_ms, round(EXTRACT(EPOCH FROM l.created_at) * 1000)::bigint) AS timestamp, l.result, l.metadata FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id ORDER BY l.created_at ASC, l.id ASC`);
+      let previousHash = "GENESIS";
+      for (let index = 0; index < result.rows.length; index += 1) {
+        const row = result.rows[index];
+        if (!row.previousHash && row.entryHash) { previousHash = row.entryHash; continue; }
+        const expected = auditEntryHash(row.previousHash ?? previousHash, { actorId: row.actorId, action: row.action, timestamp: Number(row.timestamp), result: row.result, metadata: row.metadata ?? {} });
+        if (!row.previousHash || row.previousHash !== previousHash || row.entryHash !== expected) return { valid: false, checked: index, firstInvalidId: row.id, reason: "AUDIT_HASH_MISMATCH" };
+        previousHash = row.entryHash;
+      }
+      return { valid: true, checked: result.rows.length };
     },
   },
 };

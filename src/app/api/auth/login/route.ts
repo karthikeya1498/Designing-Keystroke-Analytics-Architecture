@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authenticateAccount } from "../../../../server/accountRepository";
+import { authenticateAccount, getAccountRole } from "../../../../server/accountRepository";
 import { createSession, SESSION_COOKIE, sessionMaxAge } from "../../../utils/auth";
 
 const loginSchema = z.object({
@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     const account = await authenticateAccount(body.email.toLowerCase(), body.password);
     if (!account) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
-    const response = NextResponse.json({ authenticated: true, email: account.email }, { status: 200 });
+    const role = await getAccountRole(account.email);
+    const response = NextResponse.json({ authenticated: true, email: account.email, role }, { status: 200 });
     response.cookies.set({
       name: SESSION_COOKIE,
       value: createSession(account.id, account.email),

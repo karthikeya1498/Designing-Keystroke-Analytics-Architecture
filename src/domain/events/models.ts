@@ -12,6 +12,8 @@ export interface SanitizedKeystrokeEvent {
   dwellTimeMs?: number;
   interKeyLatencyMs?: number;
   isCorrection: boolean;
+  deviceId?: string;
+  signatureVerified?: boolean;
 }
 
 export interface SessionSummary {
@@ -43,8 +45,12 @@ export interface AnalyticsSnapshot extends SessionSummary {
 
 export interface AuditEvent {
   actorId: string;
-  action: "LOGIN" | "LOGOUT" | "SESSION_CREATED" | "ANOMALY_DETECTED" | "ALERT_CREATED" | "ADMIN_CONFIG_CHANGED";
+  action: "LOGIN" | "LOGOUT" | "SESSION_CREATED" | "ANOMALY_DETECTED" | "ALERT_CREATED" | "ADMIN_CONFIG_CHANGED" | "DEVICE_ENROLLED" | "DEVICE_REVOKED" | "SIGNATURE_REJECTED" | "AUDIT_INTEGRITY_CHECKED";
   timestamp: number;
   result: "SUCCESS" | "DENIED" | "FAILED";
   metadata?: Record<string, string | number | boolean>;
+  id?: string;
+  previousHash?: string;
+  entryHash?: string;
+  hashAlgorithm?: "sha256";
 }

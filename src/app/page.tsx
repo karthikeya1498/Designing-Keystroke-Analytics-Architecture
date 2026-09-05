@@ -10,6 +10,7 @@ import SecurityCenter from "./components/SecurityCenter";
 import DashboardNav, { type DashboardTab, type NavigationMode } from "./components/DashboardNav";
 import LogSearch from "./components/LogSearch";
 import { encryptEvent } from "./utils/crypto";
+import { getPublicDeviceKey, signTelemetryPayload } from "./utils/deviceIdentity";
 import type { SanitizedKeystrokeEvent } from "../domain/events/models";
 import { BehavioralModelPipeline } from "../domain/analytics/BehavioralModelPipeline";
 import type { BehavioralFeatureVector } from "../domain/analytics/FeatureExtractor";
@@ -35,6 +36,7 @@ export default function Home() {
   const dashboardRef = React.useRef<HTMLDivElement>(null);
   const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
   const telemetrySendChainRef = React.useRef<Promise<void>>(Promise.resolve());
+  const deviceIdRef = React.useRef<string | null>(null);
   const [currentApp, setCurrentApp] = useState("Browser typing sandbox");
 
   // Authentication & Transition States
@@ -141,7 +143,18 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Authentication failed");
-      setAuthenticatedEmail(data.email || username.toLowerCase());
+      const email = data.email || username.toLowerCase();
+      const devicesResponse = await fetch("/api/devices");
+      if (!devicesResponse.ok) throw new Error("Unable to load enrolled devices");
+      const devicesData = await devicesResponse.json() as { devices: Array<{ id: string; name: string }> };
+      let browserDevice = devicesData.devices.find((device) => device.name === "Browser typing sandbox");
+      if (!browserDevice) {
+        const registration = await fetch("/api/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Browser typing sandbox", algorithm: "Ed25519", publicKey: await getPublicDeviceKey() }) });
+        if (!registration.ok) throw new Error("Unable to enroll this browser device");
+        browserDevice = (await registration.json() as { device: { id: string; name: string } }).device;
+      }
+      deviceIdRef.current = browserDevice.id;
+      setAuthenticatedEmail(email);
       setIsLoggedIn(true);
     } catch (error) {
       setLoginError(`* Error: ${error instanceof Error ? error.message : "Authentication failed"}`);
@@ -172,10 +185,11 @@ export default function Home() {
     if (!telemetry) return;
     setTelemetryEvents((previous) => previous.length === 0 || previous[0].sessionId === telemetry.sessionId ? [...previous, telemetry] : [telemetry]);
     telemetrySendChainRef.current = telemetrySendChainRef.current.then(async () => {
-      const response = await fetch("/api/telemetry", {
+      const signed = await signTelemetryPayload(JSON.stringify({ events: [telemetry] }));
+      const response = await fetch("/api/telemetry/signed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events: [telemetry] }),
+        body: JSON.stringify({ deviceId: deviceIdRef.current, ...signed }),
       });
       if (!response.ok && response.status !== 409) throw new Error(`Telemetry API returned ${response.status}`);
     }).catch((error) => console.error("Failed to persist sanitized telemetry:", error));
